@@ -1,0 +1,60 @@
+[package]
+name = "mui"
+version = "0.1.0"
+edition = "2024"
+description = "MUI - A TUI launcher for Minecraft Java Edition"
+license = "MIT"
+
+[dependencies]
+# TUI
+ratatui = "0.30"
+crossterm = "0.29"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP client
+reqwest = { version = "0.13", features = ["json", "form"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Hashing (SHA-1 verification for Minecraft assets/libraries)
+sha1 = "0.10"
+digest = "0.10"
+
+# ZIP extraction (native libraries)
+zip = "8"
+
+# Platform directories (XDG on Linux, etc.)
+directories = "6"
+
+# Error handling
+thiserror = "2"
+color-eyre = "0.6"
+
+# Open browser for OAuth
+open = "5"
+
+# UUID generation
+uuid = { version = "1", features = ["v4"] }
+
+# Date/time (token expiry)
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# URL encoding for OAuth form posts
+serde_urlencoded = "0.7"
+url = "2.5.8"
+
+[profile.release]
+opt-level = 3        # Maximum optimisation
+lto = true           # Link-time optimisation across all crates
+codegen-units = 1    # Single codegen unit for best optimisation (slower compile)
+panic = "abort"      # Abort on panic — smaller binary, no unwind tables
+strip = true         # Strip debug symbols and metadata from binary
+
