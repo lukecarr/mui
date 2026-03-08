@@ -88,6 +88,14 @@ impl AuthStore {
                 std::fs::create_dir_all(parent)?;
             }
             std::fs::write(&self.path, json)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(
+                    &self.path,
+                    std::fs::Permissions::from_mode(0o600),
+                )?;
+            }
             debug!("Saved auth data to {:?}", self.path);
         }
         Ok(())
@@ -108,7 +116,12 @@ impl AuthStore {
         let mc_expires_at = Utc::now() + Duration::seconds(mc.expires_in as i64);
 
         // Step 5: Check entitlements
-        super::minecraft::check_entitlements(&mc.access_token, http).await?;
+        let owns_game = super::minecraft::check_entitlements(&mc.access_token, http).await?;
+        if !owns_game {
+            return Err(color_eyre::eyre::eyre!(
+                "This account does not own Minecraft"
+            ));
+        }
 
         // Step 6: Get profile
         let profile = super::minecraft::get_profile(&mc.access_token, http).await?;

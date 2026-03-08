@@ -248,16 +248,27 @@ fn classpath_separator() -> &'static str {
 
 /// Detect the system Java installation.
 pub fn detect_java() -> Option<String> {
+    let java_bin = if cfg!(target_os = "windows") {
+        "java.exe"
+    } else {
+        "java"
+    };
+
     // Try JAVA_HOME first
     if let Ok(java_home) = std::env::var("JAVA_HOME") {
-        let java_path = Path::new(&java_home).join("bin").join("java");
+        let java_path = Path::new(&java_home).join("bin").join(java_bin);
         if java_path.exists() {
             return Some(java_path.to_string_lossy().to_string());
         }
     }
 
     // Try PATH
-    if let Ok(output) = std::process::Command::new("which").arg("java").output()
+    let find_cmd = if cfg!(target_os = "windows") {
+        "where"
+    } else {
+        "which"
+    };
+    if let Ok(output) = std::process::Command::new(find_cmd).arg("java").output()
         && output.status.success()
     {
         let path = String::from_utf8_lossy(&output.stdout).trim().to_string();

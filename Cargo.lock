@@ -1423,14 +1423,11 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "serde_urlencoded",
  "sha1",
- "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "url",
- "uuid",
  "zip",
 ]
 

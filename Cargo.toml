@@ -31,14 +31,10 @@ zip = "8"
 directories = "6"
 
 # Error handling
-thiserror = "2"
 color-eyre = "0.6"
 
 # Open browser for OAuth
 open = "5"
-
-# UUID generation
-uuid = { version = "1", features = ["v4"] }
 
 # Date/time (token expiry)
 chrono = { version = "0.4", features = ["serde"] }
@@ -47,8 +43,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# URL encoding for OAuth form posts
-serde_urlencoded = "0.7"
+# URL parsing
 url = "2.5.8"
 
 [profile.release]

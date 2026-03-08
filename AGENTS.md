@@ -111,7 +111,7 @@ The log panel appears on the home screen (below instance list) and the launch sc
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ MUI  |  Logged in as username                           │  <- header (3 rows)
+│ MUI  |  Logged in as username                           │  <- header (2 rows)
 ├─────────────────────────────────────────────────────────┤
 │ Instances                                               │
 │ ▸ Minecraft 1.21.4                                      │

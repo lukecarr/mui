@@ -37,7 +37,14 @@ async fn main() -> Result<()> {
         .create(true)
         .append(true)
         .open(log_file)
-        .unwrap_or_else(|_| std::fs::File::open("/dev/null").unwrap());
+        .unwrap_or_else(|_| {
+            let null_path = if cfg!(target_os = "windows") {
+                "NUL"
+            } else {
+                "/dev/null"
+            };
+            std::fs::File::open(null_path).unwrap()
+        });
 
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("mui=info"));
