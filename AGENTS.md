@@ -51,8 +51,8 @@ src/
 - **Auth flow**: Authorization Code Flow with a temporary localhost HTTP server to catch
   the redirect. Browser opens for the user to log in. No device code flow.
 - **No offline mode** in MVP. Microsoft authentication is required.
-- **MSA Client ID**: Uses Prism Launcher's approved client ID for development
-  (`c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb`). Configurable via config file for production.
+- **MSA Client ID**: Set at build time via the `MUI_MSA_CLIENT_ID` environment variable
+  (compiled in with `env!()`). Register your own at the Azure portal.
 - **From scratch**: All auth, download, and launch logic is implemented directly using
   the raw Microsoft/Mojang APIs, not via third-party Minecraft crates.
 - **Async**: tokio runtime with reqwest for HTTP. TUI event loop runs on the main thread

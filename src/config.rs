@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use color_eyre::Result;
 use directories::ProjectDirs;
 
-/// Prism Launcher's approved MSA Client ID (for development use).
-/// For production, register your own at https://portal.azure.com/ and request
-/// approval at https://aka.ms/mce-reviewappid
-const DEFAULT_MSA_CLIENT_ID: &str = "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb";
+/// MSA Client ID for OAuth2, set at build time via the MUI_MSA_CLIENT_ID env var.
+/// Register your own at https://portal.azure.com/ and request approval at
+/// https://aka.ms/mce-reviewappid
+const DEFAULT_MSA_CLIENT_ID: &str = env!("MUI_MSA_CLIENT_ID");
 
 /// Global application configuration.
 #[derive(Debug, Clone)]
