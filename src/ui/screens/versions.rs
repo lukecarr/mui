@@ -1,11 +1,11 @@
 //! Version browser screen: browse Minecraft versions and create instances.
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Frame,
 };
 
 use crate::minecraft::manifest::{VersionEntry, VersionType};

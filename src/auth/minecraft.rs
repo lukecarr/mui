@@ -5,20 +5,17 @@
 //! - Check game entitlements (ownership)
 //! - Fetch Minecraft profile (username, UUID, skin)
 
-use color_eyre::eyre::eyre;
 use color_eyre::Result;
+use color_eyre::eyre::eyre;
 use serde::Deserialize;
 use tracing::{debug, info};
 
 use super::store::MinecraftProfile;
 use super::xbox::XboxToken;
 
-const MC_LOGIN_URL: &str =
-    "https://api.minecraftservices.com/authentication/login_with_xbox";
-const MC_ENTITLEMENTS_URL: &str =
-    "https://api.minecraftservices.com/entitlements/mcstore";
-const MC_PROFILE_URL: &str =
-    "https://api.minecraftservices.com/minecraft/profile";
+const MC_LOGIN_URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
+const MC_ENTITLEMENTS_URL: &str = "https://api.minecraftservices.com/entitlements/mcstore";
+const MC_PROFILE_URL: &str = "https://api.minecraftservices.com/minecraft/profile";
 
 /// Tokens received from the Minecraft login exchange.
 #[derive(Debug, Clone)]
@@ -50,10 +47,7 @@ struct ProfileResponse {
 }
 
 /// Exchange an XSTS token for a Minecraft access token.
-pub async fn login_with_xbox(
-    xsts: &XboxToken,
-    http: &reqwest::Client,
-) -> Result<McTokens> {
+pub async fn login_with_xbox(xsts: &XboxToken, http: &reqwest::Client) -> Result<McTokens> {
     debug!("Exchanging XSTS token for Minecraft access token...");
 
     let identity_token = format!("XBL3.0 x={};{}", xsts.user_hash, xsts.token);
@@ -86,10 +80,7 @@ pub async fn login_with_xbox(
 }
 
 /// Check that the account owns Minecraft.
-pub async fn check_entitlements(
-    mc_token: &str,
-    http: &reqwest::Client,
-) -> Result<bool> {
+pub async fn check_entitlements(mc_token: &str, http: &reqwest::Client) -> Result<bool> {
     debug!("Checking Minecraft entitlements...");
 
     let resp = http
@@ -102,11 +93,7 @@ pub async fn check_entitlements(
     let text = resp.text().await?;
 
     if !status.is_success() {
-        return Err(eyre!(
-            "Entitlements check failed ({}): {}",
-            status,
-            text
-        ));
+        return Err(eyre!("Entitlements check failed ({}): {}", status, text));
     }
 
     let ent: EntitlementsResponse = serde_json::from_str(&text)?;
@@ -123,10 +110,7 @@ pub async fn check_entitlements(
 }
 
 /// Fetch the Minecraft profile (username, UUID) for the authenticated user.
-pub async fn get_profile(
-    mc_token: &str,
-    http: &reqwest::Client,
-) -> Result<MinecraftProfile> {
+pub async fn get_profile(mc_token: &str, http: &reqwest::Client) -> Result<MinecraftProfile> {
     debug!("Fetching Minecraft profile...");
 
     let resp = http

@@ -7,11 +7,11 @@
 use std::sync::{Arc, Mutex};
 
 use ratatui::{
+    Frame,
     layout::Rect,
     style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
-    Frame,
 };
 use tracing_subscriber::Layer;
 

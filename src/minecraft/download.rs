@@ -4,8 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
-use color_eyre::eyre::eyre;
 use color_eyre::Result;
+use color_eyre::eyre::eyre;
 use digest::Digest;
 use sha1::Sha1;
 use tokio::sync::mpsc;
@@ -36,9 +36,7 @@ pub async fn download_version(
     let mut tasks: Vec<DownloadTask> = Vec::new();
 
     // 1. Client JAR
-    let client_jar_path = versions_dir
-        .join(&meta.id)
-        .join(format!("{}.jar", meta.id));
+    let client_jar_path = versions_dir.join(&meta.id).join(format!("{}.jar", meta.id));
     tasks.push(DownloadTask {
         url: meta.downloads.client.url.clone(),
         path: client_jar_path,
@@ -262,10 +260,7 @@ async fn download_file(http: &reqwest::Client, task: &DownloadTask) -> Result<()
                 "SHA-1 mismatch for {}: expected {}, got {}",
                 task.label, expected, actual
             );
-            return Err(eyre!(
-                "SHA-1 verification failed for {}",
-                task.label
-            ));
+            return Err(eyre!("SHA-1 verification failed for {}", task.label));
         }
     }
 
@@ -298,7 +293,13 @@ pub fn collect_classpath(
         }
 
         // Skip native-only libraries (they go to the natives dir, not classpath)
-        if lib.natives.is_some() && lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()).is_none() {
+        if lib.natives.is_some()
+            && lib
+                .downloads
+                .as_ref()
+                .and_then(|d| d.artifact.as_ref())
+                .is_none()
+        {
             continue;
         }
 
@@ -315,19 +316,14 @@ pub fn collect_classpath(
     }
 
     // Client JAR goes last on classpath
-    let client_jar = versions_dir
-        .join(&meta.id)
-        .join(format!("{}.jar", meta.id));
+    let client_jar = versions_dir.join(&meta.id).join(format!("{}.jar", meta.id));
     classpath.push(client_jar);
 
     classpath
 }
 
 /// Get paths for all native library JARs that need to be extracted.
-pub fn collect_native_jars(
-    meta: &VersionMeta,
-    libraries_dir: &Path,
-) -> Vec<PathBuf> {
+pub fn collect_native_jars(meta: &VersionMeta, libraries_dir: &Path) -> Vec<PathBuf> {
     let mut natives = Vec::new();
 
     for lib in &meta.libraries {
@@ -363,10 +359,7 @@ pub fn collect_native_jars(
 }
 
 /// Extract native libraries from their JARs into a directory.
-pub fn extract_natives(
-    native_jars: &[PathBuf],
-    natives_dir: &Path,
-) -> Result<()> {
+pub fn extract_natives(native_jars: &[PathBuf], natives_dir: &Path) -> Result<()> {
     std::fs::create_dir_all(natives_dir)?;
 
     for jar_path in native_jars {

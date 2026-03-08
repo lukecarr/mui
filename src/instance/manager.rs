@@ -6,8 +6,8 @@
 
 use std::path::{Path, PathBuf};
 
-use color_eyre::eyre::eyre;
 use color_eyre::Result;
+use color_eyre::eyre::eyre;
 use tracing::{debug, info};
 
 use super::config::InstanceConfig;

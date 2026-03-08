@@ -34,8 +34,6 @@ pub struct VersionMeta {
     pub asset_index: AssetIndexRef,
 
     pub downloads: Downloads,
-
-
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -127,10 +125,7 @@ pub struct AssetObject {
 }
 
 /// Fetch and parse the version metadata JSON for a specific version.
-pub async fn fetch_version_meta(
-    url: &str,
-    http: &reqwest::Client,
-) -> Result<VersionMeta> {
+pub async fn fetch_version_meta(url: &str, http: &reqwest::Client) -> Result<VersionMeta> {
     debug!("Fetching version metadata from {url}...");
     let meta: VersionMeta = http.get(url).send().await?.json().await?;
     debug!(
@@ -143,10 +138,7 @@ pub async fn fetch_version_meta(
 }
 
 /// Fetch and parse an asset index JSON.
-pub async fn fetch_asset_index(
-    url: &str,
-    http: &reqwest::Client,
-) -> Result<AssetIndex> {
+pub async fn fetch_asset_index(url: &str, http: &reqwest::Client) -> Result<AssetIndex> {
     debug!("Fetching asset index from {url}...");
     let index: AssetIndex = http.get(url).send().await?.json().await?;
     debug!("Asset index has {} objects", index.objects.len());

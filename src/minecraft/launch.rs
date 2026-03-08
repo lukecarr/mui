@@ -44,10 +44,7 @@ pub struct LaunchConfig {
 }
 
 /// Build the complete JVM command and spawn the game process.
-pub async fn launch(
-    meta: &VersionMeta,
-    config: &LaunchConfig,
-) -> Result<tokio::process::Child> {
+pub async fn launch(meta: &VersionMeta, config: &LaunchConfig) -> Result<tokio::process::Child> {
     // Extract natives
     let native_jars = download::collect_native_jars(meta, &config.libraries_dir);
     download::extract_natives(&native_jars, &config.natives_dir)?;
@@ -173,7 +170,10 @@ fn build_token_map(
     tokens.insert("auth_player_name".to_string(), config.username.clone());
     tokens.insert("auth_uuid".to_string(), config.uuid.clone());
     tokens.insert("auth_access_token".to_string(), config.access_token.clone());
-    tokens.insert("auth_session".to_string(), format!("token:{}:{}", config.access_token, config.uuid));
+    tokens.insert(
+        "auth_session".to_string(),
+        format!("token:{}:{}", config.access_token, config.uuid),
+    );
     tokens.insert("auth_xuid".to_string(), String::new()); // Not tracking XUID
     tokens.insert("clientid".to_string(), String::new());
     tokens.insert("user_type".to_string(), "msa".to_string());
@@ -184,18 +184,42 @@ fn build_token_map(
     tokens.insert("version_type".to_string(), meta.version_type.clone());
 
     // Paths
-    tokens.insert("game_directory".to_string(), config.game_dir.to_string_lossy().to_string());
-    tokens.insert("assets_root".to_string(), config.assets_dir.to_string_lossy().to_string());
-    tokens.insert("game_assets".to_string(), config.assets_dir.to_string_lossy().to_string());
+    tokens.insert(
+        "game_directory".to_string(),
+        config.game_dir.to_string_lossy().to_string(),
+    );
+    tokens.insert(
+        "assets_root".to_string(),
+        config.assets_dir.to_string_lossy().to_string(),
+    );
+    tokens.insert(
+        "game_assets".to_string(),
+        config.assets_dir.to_string_lossy().to_string(),
+    );
     tokens.insert("assets_index_name".to_string(), meta.asset_index.id.clone());
-    tokens.insert("natives_directory".to_string(), config.natives_dir.to_string_lossy().to_string());
-    tokens.insert("library_directory".to_string(), config.libraries_dir.to_string_lossy().to_string());
-    tokens.insert("classpath_separator".to_string(), classpath_separator().to_string());
+    tokens.insert(
+        "natives_directory".to_string(),
+        config.natives_dir.to_string_lossy().to_string(),
+    );
+    tokens.insert(
+        "library_directory".to_string(),
+        config.libraries_dir.to_string_lossy().to_string(),
+    );
+    tokens.insert(
+        "classpath_separator".to_string(),
+        classpath_separator().to_string(),
+    );
     tokens.insert("classpath".to_string(), classpath.to_string());
 
     // Window
-    tokens.insert("resolution_width".to_string(), config.window_width.to_string());
-    tokens.insert("resolution_height".to_string(), config.window_height.to_string());
+    tokens.insert(
+        "resolution_width".to_string(),
+        config.window_width.to_string(),
+    );
+    tokens.insert(
+        "resolution_height".to_string(),
+        config.window_height.to_string(),
+    );
 
     // Misc
     tokens.insert("profile_name".to_string(), "MUI".to_string());

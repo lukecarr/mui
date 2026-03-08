@@ -1,10 +1,10 @@
 //! Launch progress screen: shows download progress and game log output.
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     text::{Line, Span},
     widgets::{Block, Borders, Gauge, Paragraph, Wrap},
-    Frame,
 };
 
 use crate::minecraft::download::DownloadProgress;

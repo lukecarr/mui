@@ -54,12 +54,7 @@ impl std::fmt::Display for VersionType {
 pub async fn fetch_manifest(http: &reqwest::Client) -> Result<VersionManifest> {
     debug!("Fetching version manifest...");
 
-    let manifest: VersionManifest = http
-        .get(VERSION_MANIFEST_URL)
-        .send()
-        .await?
-        .json()
-        .await?;
+    let manifest: VersionManifest = http.get(VERSION_MANIFEST_URL).send().await?.json().await?;
 
     debug!(
         "Got {} versions (latest release: {}, snapshot: {})",

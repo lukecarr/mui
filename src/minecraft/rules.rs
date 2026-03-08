@@ -83,4 +83,3 @@ fn rule_applies(rule: &Rule) -> bool {
 
     true
 }
-

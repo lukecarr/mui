@@ -7,15 +7,13 @@
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 
-use color_eyre::eyre::eyre;
 use color_eyre::Result;
+use color_eyre::eyre::eyre;
 use serde::Deserialize;
 use tracing::{debug, info};
 
-const AUTHORIZE_URL: &str =
-    "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
-const TOKEN_URL: &str =
-    "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
+const AUTHORIZE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
+const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const SCOPE: &str = "XboxLive.signin offline_access";
 
 /// Tokens received from a successful Microsoft OAuth2 exchange.
@@ -69,8 +67,7 @@ pub async fn login(client_id: &str, http: &reqwest::Client) -> Result<MsaTokens>
     // Wait for the redirect (blocking, so we run on a blocking thread)
     let code = {
         let redirect_uri_clone = redirect_uri.clone();
-        tokio::task::spawn_blocking(move || wait_for_code(listener, &redirect_uri_clone))
-            .await??
+        tokio::task::spawn_blocking(move || wait_for_code(listener, &redirect_uri_clone)).await??
     };
 
     debug!("Received authorization code");
@@ -94,11 +91,7 @@ pub async fn refresh(
         ("scope", SCOPE),
     ];
 
-    let resp = http
-        .post(TOKEN_URL)
-        .form(&params)
-        .send()
-        .await?;
+    let resp = http.post(TOKEN_URL).form(&params).send().await?;
 
     parse_token_response(resp).await
 }
@@ -157,11 +150,7 @@ async fn exchange_code(
         ("scope", SCOPE),
     ];
 
-    let resp = http
-        .post(TOKEN_URL)
-        .form(&params)
-        .send()
-        .await?;
+    let resp = http.post(TOKEN_URL).form(&params).send().await?;
 
     parse_token_response(resp).await
 }

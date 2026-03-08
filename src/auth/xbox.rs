@@ -4,8 +4,8 @@
 //! - Exchange MSA token for Xbox Live User Token
 //! - Exchange XBL User Token for XSTS Authorization Token
 
-use color_eyre::eyre::eyre;
 use color_eyre::Result;
+use color_eyre::eyre::eyre;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -84,10 +84,7 @@ struct XstsError {
 }
 
 /// Exchange an MSA access token for an Xbox Live User Token.
-pub async fn get_user_token(
-    msa_token: &str,
-    http: &reqwest::Client,
-) -> Result<XboxToken> {
+pub async fn get_user_token(msa_token: &str, http: &reqwest::Client) -> Result<XboxToken> {
     debug!("Exchanging MSA token for Xbox Live User Token...");
 
     let body = XblRequest {
@@ -112,10 +109,7 @@ pub async fn get_user_token(
 }
 
 /// Exchange an Xbox Live User Token for an XSTS Authorization Token.
-pub async fn get_xsts_token(
-    user_token: &XboxToken,
-    http: &reqwest::Client,
-) -> Result<XboxToken> {
+pub async fn get_xsts_token(user_token: &XboxToken, http: &reqwest::Client) -> Result<XboxToken> {
     debug!("Exchanging Xbox Live User Token for XSTS Token...");
 
     let body = XstsRequest {
@@ -151,11 +145,9 @@ async fn parse_xbox_response(resp: reqwest::Response, label: &str) -> Result<Xbo
                 Some(2148916235) => {
                     "Xbox Live is not available in your country/region.".to_string()
                 }
-                Some(2148916238) => {
-                    "This account belongs to a minor and must be added to a \
+                Some(2148916238) => "This account belongs to a minor and must be added to a \
                      Microsoft Family to use Xbox Live."
-                        .to_string()
-                }
+                    .to_string(),
                 Some(code) => format!(
                     "Xbox error {code}: {}",
                     err.message.as_deref().unwrap_or("unknown")

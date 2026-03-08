@@ -94,11 +94,7 @@ impl AuthStore {
     }
 
     /// Perform a fresh login (opens browser).
-    pub async fn login(
-        &mut self,
-        client_id: &str,
-        http: &reqwest::Client,
-    ) -> Result<()> {
+    pub async fn login(&mut self, client_id: &str, http: &reqwest::Client) -> Result<()> {
         // Step 1: Microsoft OAuth2
         let msa = msa::login(client_id, http).await?;
         let msa_expires_at = Utc::now() + Duration::seconds(msa.expires_in as i64);
@@ -115,8 +111,7 @@ impl AuthStore {
         super::minecraft::check_entitlements(&mc.access_token, http).await?;
 
         // Step 6: Get profile
-        let profile =
-            super::minecraft::get_profile(&mc.access_token, http).await?;
+        let profile = super::minecraft::get_profile(&mc.access_token, http).await?;
 
         self.data = Some(AuthData {
             msa_refresh_token: msa.refresh_token,
@@ -133,11 +128,7 @@ impl AuthStore {
     }
 
     /// Refresh tokens if needed. Returns Ok(true) if tokens are valid.
-    pub async fn ensure_valid(
-        &mut self,
-        client_id: &str,
-        http: &reqwest::Client,
-    ) -> Result<bool> {
+    pub async fn ensure_valid(&mut self, client_id: &str, http: &reqwest::Client) -> Result<bool> {
         let data = match &self.data {
             Some(d) => d,
             None => return Ok(false), // Not logged in

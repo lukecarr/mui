@@ -433,10 +433,7 @@ impl App {
                     {
                         let ver_id = ver.id.clone();
                         let ver_url = ver.url.clone();
-                        match self
-                            .instance_manager
-                            .create(name, &ver_id, &ver_url)
-                        {
+                        match self.instance_manager.create(name, &ver_id, &ver_url) {
                             Ok(_) => {
                                 info!("Created instance '{name}' with version {ver_id}");
                                 self.refresh_instances();
@@ -557,7 +554,9 @@ impl App {
         let client_id = self.config.msa_client_id.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = run_launch_pipeline(tx.clone(), http, config, client_id, auth_data, instance).await {
+            if let Err(e) =
+                run_launch_pipeline(tx.clone(), http, config, client_id, auth_data, instance).await
+            {
                 let _ = tx.send(AppEvent::LaunchError(format!("{e}")));
             }
         });
@@ -575,7 +574,9 @@ async fn run_launch_pipeline(
     instance: Instance,
 ) -> Result<()> {
     // 1. Ensure auth is valid (refresh if needed)
-    let _ = tx.send(AppEvent::LaunchStatus("Validating authentication...".into()));
+    let _ = tx.send(AppEvent::LaunchStatus(
+        "Validating authentication...".into(),
+    ));
     let mc_token;
     if auth_data.mc_token_valid() {
         mc_token = auth_data.mc_access_token.clone();
@@ -706,5 +707,3 @@ async fn run_launch_pipeline(
 
     Ok(())
 }
-
-
