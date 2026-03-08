@@ -178,9 +178,7 @@ async fn parse_token_response(resp: reqwest::Response) -> Result<MsaTokens> {
     })
 }
 
-/// Minimal percent-encoding for URL query parameters.
+/// Percent-encoding for URL query parameters.
 fn urlencoded(s: &str) -> String {
-    s.replace(' ', "%20")
-        .replace(':', "%3A")
-        .replace('/', "%2F")
+    url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }

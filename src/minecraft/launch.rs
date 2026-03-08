@@ -142,7 +142,7 @@ pub async fn launch(meta: &VersionMeta, config: &LaunchConfig) -> Result<tokio::
 
     info!("Launching Minecraft {}...", meta.id);
     debug!("Java: {}", config.java_path);
-    debug!("Args: {:?}", args);
+
 
     // Ensure game directory exists
     tokio::fs::create_dir_all(&config.game_dir).await?;

@@ -476,8 +476,7 @@ impl App {
                 self.versions.list_state.select(Some(0));
             }
             KeyCode::Enter => {
-                if self.versions.selected_version().is_some() {
-                    let ver = self.versions.selected_version().unwrap();
+                if let Some(ver) = self.versions.selected_version() {
                     self.versions.input_name = Some(format!("Minecraft {}", ver.id));
                 }
             }

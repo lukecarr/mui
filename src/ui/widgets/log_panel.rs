@@ -129,41 +129,57 @@ where
         let mut visitor = MessageVisitor::default();
         event.record(&mut visitor);
 
-        let text = visitor.message;
+        // Combine the primary message and any additional fields, independent of field order.
+        let mut text = String::new();
+        if let Some(msg) = visitor.message {
+            text.push_str(&msg);
+        }
+        if !visitor.fields.is_empty() {
+            if !text.is_empty() {
+                text.push(' ');
+            }
+            text.push_str(&visitor.fields);
+        }
+
         if !text.is_empty() {
             self.buffer.push(*event.metadata().level(), text);
         }
     }
 }
 
-/// Visitor that extracts the `message` field from a tracing event.
+/// Visitor that extracts the `message` field and any additional fields from a tracing event.
 #[derive(Default)]
 struct MessageVisitor {
-    message: String,
+    /// The primary log message (`message` field), if present.
+    message: Option<String>,
+    /// Formatted non-`message` fields collected as `key=value`.
+    fields: String,
 }
 
 impl tracing::field::Visit for MessageVisitor {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
         if field.name() == "message" {
-            self.message = value.to_string();
+            // Store the primary message separately so we don't overwrite other fields.
+            self.message = Some(value.to_string());
         } else {
-            // Append non-message fields
-            if !self.message.is_empty() {
-                self.message.push(' ');
+            // Append non-message fields, preserving any existing content.
+            if !self.fields.is_empty() {
+                self.fields.push(' ');
             }
-            self.message
+            self.fields
                 .push_str(&format!("{}={}", field.name(), value));
         }
     }
 
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == "message" {
-            self.message = format!("{value:?}");
+            // Store the primary message separately so we don't overwrite other fields.
+            self.message = Some(format!("{value:?}"));
         } else {
-            if !self.message.is_empty() {
-                self.message.push(' ');
+            if !self.fields.is_empty() {
+                self.fields.push(' ');
             }
-            self.message
+            self.fields
                 .push_str(&format!("{}={:?}", field.name(), value));
         }
     }
