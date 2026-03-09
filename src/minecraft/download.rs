@@ -254,10 +254,20 @@ async fn download_file(http: &reqwest::Client, task: &DownloadTask) -> Result<()
     let resp = http.get(&task.url).send().await?;
     let status = resp.status();
     if !status.is_success() {
+        // Consume the response body (capped at 1 KiB) so the connection can be
+        // reused, and include a truncated snippet in the error for diagnostics.
+        const MAX_ERROR_BODY: usize = 1024;
+        let full_body = resp.text().await.unwrap_or_default();
+        let body = if full_body.len() > MAX_ERROR_BODY {
+            format!("{}... (truncated)", &full_body[..MAX_ERROR_BODY])
+        } else {
+            full_body
+        };
         return Err(MinecraftError::DownloadFailed {
             label: task.label.clone(),
             status: status.to_string(),
             url: task.url.clone(),
+            body,
         });
     }
 

@@ -20,7 +20,7 @@ pub enum MinecraftError {
     Io(#[from] std::io::Error),
 
     /// A file download returned a non-success HTTP status.
-    #[error("Download failed for {label} ({status}): {url}")]
+    #[error("Download failed for {label} ({status}): {url}\n{body}")]
     DownloadFailed {
         /// Human-readable label for the file being downloaded.
         label: String,
@@ -28,6 +28,8 @@ pub enum MinecraftError {
         status: String,
         /// The URL that was requested.
         url: String,
+        /// Truncated response body (up to 1 KiB) for diagnostics.
+        body: String,
     },
 
     /// SHA-1 hash of the downloaded file does not match the expected value.
