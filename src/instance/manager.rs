@@ -106,12 +106,24 @@ impl InstanceManager {
     ///
     /// # Errors
     ///
-    /// Returns [`InstanceError::AlreadyExists`] if the sanitized directory
-    /// name already exists on disk.
+    /// Returns [`InstanceError::InvalidName`] if the name is empty or would
+    /// cause path traversal, or [`InstanceError::AlreadyExists`] if the
+    /// sanitized directory name already exists on disk.
     pub fn create(&self, name: &str, version_id: &str, version_url: &str) -> Result<Instance> {
         // Generate a directory name from the instance name
         let dir_name = sanitize_dirname(name);
+
+        // Reject names that are empty or resolve to special directory entries
+        if dir_name.is_empty() || dir_name == "." || dir_name == ".." {
+            return Err(InstanceError::InvalidName(name.to_string()));
+        }
+
         let instance_dir = self.instances_dir.join(&dir_name);
+
+        // Defense-in-depth: verify the resolved path stays within instances_dir
+        if !instance_dir.starts_with(&self.instances_dir) {
+            return Err(InstanceError::InvalidName(name.to_string()));
+        }
 
         if instance_dir.exists() {
             return Err(InstanceError::AlreadyExists(dir_name));
@@ -156,8 +168,12 @@ impl InstanceManager {
 }
 
 /// Convert an instance name to a safe directory name.
+///
+/// Replaces any character that isn't alphanumeric, `-`, `_`, or `.` with `_`,
+/// then strips leading dots to prevent `.` and `..` traversal.
 fn sanitize_dirname(name: &str) -> String {
-    name.chars()
+    let sanitized: String = name
+        .chars()
         .map(|c| {
             if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
                 c
@@ -165,5 +181,58 @@ fn sanitize_dirname(name: &str) -> String {
                 '_'
             }
         })
-        .collect()
+        .collect();
+
+    // Strip leading dots to prevent "." and ".." directory traversal
+    sanitized.trim_start_matches('.').to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_dirname_normal_name() {
+        assert_eq!(sanitize_dirname("Minecraft 1.21.4"), "Minecraft_1.21.4");
+    }
+
+    #[test]
+    fn sanitize_dirname_strips_path_separators() {
+        // "../../etc/passwd" -> ".._.._ etc_passwd" (slashes/spaces become _)
+        // -> leading dots stripped -> "_.._etc_passwd"
+        assert_eq!(sanitize_dirname("../../etc/passwd"), "_.._etc_passwd");
+    }
+
+    #[test]
+    fn sanitize_dirname_dot_dot() {
+        // ".." must not survive sanitization — leading dots are stripped
+        assert_eq!(sanitize_dirname(".."), "");
+    }
+
+    #[test]
+    fn sanitize_dirname_single_dot() {
+        assert_eq!(sanitize_dirname("."), "");
+    }
+
+    #[test]
+    fn sanitize_dirname_leading_dots_stripped() {
+        assert_eq!(sanitize_dirname("...hidden"), "hidden");
+        assert_eq!(sanitize_dirname("..name"), "name");
+    }
+
+    #[test]
+    fn sanitize_dirname_preserves_internal_dots() {
+        assert_eq!(sanitize_dirname("my.instance.1.21"), "my.instance.1.21");
+    }
+
+    #[test]
+    fn sanitize_dirname_empty_input() {
+        assert_eq!(sanitize_dirname(""), "");
+    }
+
+    #[test]
+    fn sanitize_dirname_only_special_chars() {
+        // All replaced with `_`, no leading dots
+        assert_eq!(sanitize_dirname("@#$ %^&"), "_______");
+    }
 }
