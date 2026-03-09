@@ -4,7 +4,7 @@
 //! - `instance.json`: Instance configuration
 //! - `minecraft/`: The `.minecraft` game directory
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use tracing::{debug, info};
 
@@ -113,17 +113,22 @@ impl InstanceManager {
         // Generate a directory name from the instance name
         let dir_name = sanitize_dirname(name);
 
-        // Reject names that are empty or resolve to special directory entries
-        if dir_name.is_empty() || dir_name == "." || dir_name == ".." {
+        // Reject names that sanitize to an empty directory name
+        if dir_name.is_empty() {
+            return Err(InstanceError::InvalidName(name.to_string()));
+        }
+
+        // Defense-in-depth: verify dir_name is a single normal path component
+        // (no RootDir, Prefix, ParentDir, or CurDir components)
+        let path = Path::new(&dir_name);
+        let mut components = path.components();
+        let is_single_normal =
+            matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none();
+        if !is_single_normal {
             return Err(InstanceError::InvalidName(name.to_string()));
         }
 
         let instance_dir = self.instances_dir.join(&dir_name);
-
-        // Defense-in-depth: verify the resolved path stays within instances_dir
-        if !instance_dir.starts_with(&self.instances_dir) {
-            return Err(InstanceError::InvalidName(name.to_string()));
-        }
 
         if instance_dir.exists() {
             return Err(InstanceError::AlreadyExists(dir_name));
@@ -198,7 +203,7 @@ mod tests {
 
     #[test]
     fn sanitize_dirname_strips_path_separators() {
-        // "../../etc/passwd" -> ".._.._ etc_passwd" (slashes/spaces become _)
+        // "../../etc/passwd" -> ".._.._etc_passwd" (slashes become _)
         // -> leading dots stripped -> "_.._etc_passwd"
         assert_eq!(sanitize_dirname("../../etc/passwd"), "_.._etc_passwd");
     }
