@@ -4,10 +4,13 @@
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use digest::Digest;
 use sha1::Sha1;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Semaphore};
+use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
 
 use super::MinecraftError;
@@ -23,7 +26,7 @@ pub struct DownloadProgress {
     pub total_files: usize,
     /// Number of files downloaded so far.
     pub completed_files: usize,
-    /// Label of the file currently being downloaded.
+    /// Label of the last downloaded file.
     pub current_file: String,
 }
 
@@ -187,21 +190,44 @@ pub async fn download_version(
 
     info!("{pending} files need downloading");
 
-    let mut completed = total_files - pending;
+    // Download files concurrently using a semaphore to limit parallelism
+    // and a JoinSet to track spawned tasks.
+    const MAX_CONCURRENT: usize = 32;
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT));
+    let completed = Arc::new(AtomicUsize::new(total_files - pending));
+    let mut join_set = JoinSet::new();
 
-    for task in &tasks {
-        if let Some(ref tx) = progress_tx {
-            let _ = tx
-                .send(DownloadProgress {
-                    total_files,
-                    completed_files: completed,
-                    current_file: task.label.clone(),
-                })
-                .await;
-        }
+    for task in tasks {
+        let sem = semaphore.clone();
+        let http = http.clone();
+        let completed = completed.clone();
+        let progress_tx = progress_tx.clone();
 
-        download_file(http, task).await?;
-        completed += 1;
+        join_set.spawn(async move {
+            let permit = match sem.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => return Ok(()), // semaphore closed; graceful shutdown
+            };
+            download_file(&http, &task).await?;
+            drop(permit); // release before sending progress to avoid throttling downloads
+            let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
+            if let Some(tx) = progress_tx {
+                let _ = tx
+                    .send(DownloadProgress {
+                        total_files,
+                        completed_files: done,
+                        current_file: task.label,
+                    })
+                    .await;
+            }
+            Ok::<(), MinecraftError>(())
+        });
+    }
+
+    // Drain results — fail fast on first error.
+    // Dropping the JoinSet aborts any remaining tasks.
+    while let Some(result) = join_set.join_next().await {
+        result??;
     }
 
     if let Some(ref tx) = progress_tx {
