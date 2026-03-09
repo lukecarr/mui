@@ -5,13 +5,14 @@
 //! - Check game entitlements (ownership)
 //! - Fetch Minecraft profile (username, UUID, skin)
 
-use color_eyre::Result;
-use color_eyre::eyre::eyre;
 use serde::Deserialize;
 use tracing::{debug, info};
 
+use super::AuthError;
 use super::store::MinecraftProfile;
 use super::xbox::XboxToken;
+
+type Result<T> = std::result::Result<T, AuthError>;
 
 const MC_LOGIN_URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 const MC_ENTITLEMENTS_URL: &str = "https://api.minecraftservices.com/entitlements/mcstore";
@@ -67,7 +68,10 @@ pub async fn login_with_xbox(xsts: &XboxToken, http: &reqwest::Client) -> Result
     let text = resp.text().await?;
 
     if !status.is_success() {
-        return Err(eyre!("Minecraft login failed ({}): {}", status, text));
+        return Err(AuthError::MinecraftLogin {
+            status: status.to_string(),
+            body: text,
+        });
     }
 
     let login: McLoginResponse = serde_json::from_str(&text)?;
@@ -93,7 +97,10 @@ pub async fn check_entitlements(mc_token: &str, http: &reqwest::Client) -> Resul
     let text = resp.text().await?;
 
     if !status.is_success() {
-        return Err(eyre!("Entitlements check failed ({}): {}", status, text));
+        return Err(AuthError::EntitlementsFailed {
+            status: status.to_string(),
+            body: text,
+        });
     }
 
     let ent: EntitlementsResponse = serde_json::from_str(&text)?;
@@ -123,18 +130,14 @@ pub async fn get_profile(mc_token: &str, http: &reqwest::Client) -> Result<Minec
     let text = resp.text().await?;
 
     if status.as_u16() == 404 {
-        return Err(eyre!(
-            "This Microsoft account does not have a Minecraft profile. \
-             You may need to purchase the game."
-        ));
+        return Err(AuthError::NoProfile);
     }
 
     if !status.is_success() {
-        return Err(eyre!(
-            "Minecraft profile request failed ({}): {}",
-            status,
-            text
-        ));
+        return Err(AuthError::ProfileFailed {
+            status: status.to_string(),
+            body: text,
+        });
     }
 
     let profile: ProfileResponse = serde_json::from_str(&text)?;

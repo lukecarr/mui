@@ -32,6 +32,7 @@ directories = "6"
 
 # Error handling
 color-eyre = "0.6"
+thiserror = "2"
 
 # Open browser for OAuth
 open = "5"
@@ -45,6 +46,15 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # URL parsing
 url = "2.5.8"
+
+[lints.rust]
+future-incompatible = "warn"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+redundant_clone = { level = "deny", priority = 1 }
+large_enum_variant = { level = "warn", priority = 1 }
+needless_collect = { level = "warn", priority = 1 }
 
 [profile.release]
 opt-level = 3        # Maximum optimisation

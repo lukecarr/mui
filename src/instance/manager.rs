@@ -1,23 +1,26 @@
 //! Instance management: create, list, delete, configure instances.
 //!
 //! Each instance has its own directory containing:
-//! - instance.json: Instance configuration
-//! - minecraft/: The .minecraft game directory
+//! - `instance.json`: Instance configuration
+//! - `minecraft/`: The `.minecraft` game directory
 
 use std::path::{Path, PathBuf};
 
-use color_eyre::Result;
-use color_eyre::eyre::eyre;
 use tracing::{debug, info};
 
 use super::config::InstanceConfig;
+use super::InstanceError;
+
+type Result<T> = std::result::Result<T, InstanceError>;
 
 const INSTANCE_CONFIG_FILE: &str = "instance.json";
 
 /// An instance with its config and directory path.
 #[derive(Debug, Clone)]
 pub struct Instance {
+    /// The parsed instance configuration.
     pub config: InstanceConfig,
+    /// The root directory of this instance on disk.
     pub dir: PathBuf,
 }
 
@@ -34,19 +37,26 @@ impl Instance {
 }
 
 /// Manages instances on disk.
+///
+/// Handles creating, listing, deleting, and saving instance configurations
+/// within the instances directory.
 #[derive(Debug)]
 pub struct InstanceManager {
     instances_dir: PathBuf,
 }
 
 impl InstanceManager {
+    /// Create a new instance manager for the given instances directory.
     pub fn new(instances_dir: &Path) -> Self {
         Self {
             instances_dir: instances_dir.to_path_buf(),
         }
     }
 
-    /// List all instances.
+    /// List all instances found on disk.
+    ///
+    /// Instances with unparseable configs are skipped with a warning.
+    /// Results are sorted by name.
     pub fn list(&self) -> Result<Vec<Instance>> {
         let mut instances = Vec::new();
 
@@ -92,14 +102,19 @@ impl InstanceManager {
         Ok(instances)
     }
 
-    /// Create a new instance.
+    /// Create a new instance with the given name and Minecraft version.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InstanceError::AlreadyExists`] if the sanitized directory
+    /// name already exists on disk.
     pub fn create(&self, name: &str, version_id: &str, version_url: &str) -> Result<Instance> {
         // Generate a directory name from the instance name
         let dir_name = sanitize_dirname(name);
         let instance_dir = self.instances_dir.join(&dir_name);
 
         if instance_dir.exists() {
-            return Err(eyre!("Instance directory already exists: {}", dir_name));
+            return Err(InstanceError::AlreadyExists(dir_name));
         }
 
         info!("Creating instance '{}' at {:?}", name, instance_dir);
@@ -125,14 +140,14 @@ impl InstanceManager {
         })
     }
 
-    /// Save an instance's updated config.
+    /// Save an instance's updated config to disk.
     pub fn save_config(&self, instance: &Instance) -> Result<()> {
         let config_json = serde_json::to_string_pretty(&instance.config)?;
         std::fs::write(instance.dir.join(INSTANCE_CONFIG_FILE), config_json)?;
         Ok(())
     }
 
-    /// Delete an instance and all its files.
+    /// Delete an instance and all its files from disk.
     pub fn delete(&self, instance: &Instance) -> Result<()> {
         info!("Deleting instance '{}'", instance.config.name);
         std::fs::remove_dir_all(&instance.dir)?;

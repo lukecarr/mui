@@ -1,28 +1,40 @@
 //! Download engine: assets, libraries, client JAR.
 //!
-//! Downloads files with SHA-1 verification and progress reporting via a callback.
+//! Downloads files with SHA-1 verification and progress reporting via a channel.
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use color_eyre::Result;
-use color_eyre::eyre::eyre;
 use digest::Digest;
 use sha1::Sha1;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
+use super::MinecraftError;
 use super::rules;
 use super::version::{AssetIndex, VersionMeta};
+
+type Result<T> = std::result::Result<T, MinecraftError>;
 
 /// Progress update sent during downloads.
 #[derive(Debug, Clone)]
 pub struct DownloadProgress {
+    /// Total number of files to download.
     pub total_files: usize,
+    /// Number of files downloaded so far.
     pub completed_files: usize,
+    /// Label of the file currently being downloaded.
     pub current_file: String,
 }
 
 /// Download all required files for a version: client JAR, libraries, and assets.
+///
+/// Files that already exist and pass SHA-1 verification are skipped.
+/// Progress updates are sent through `progress_tx` if provided.
+///
+/// # Errors
+///
+/// Returns [`MinecraftError`] if any download or verification step fails.
 pub async fn download_version(
     meta: &VersionMeta,
     asset_index: &AssetIndex,
@@ -242,12 +254,21 @@ async fn download_file(http: &reqwest::Client, task: &DownloadTask) -> Result<()
     let resp = http.get(&task.url).send().await?;
     let status = resp.status();
     if !status.is_success() {
-        return Err(eyre!(
-            "Failed to download {} ({}): {}",
-            task.label,
-            status,
-            task.url
-        ));
+        // Consume the response body (capped at 1 KiB) so the connection can be
+        // reused, and include a truncated snippet in the error for diagnostics.
+        const MAX_ERROR_BODY: usize = 1024;
+        let full_body = resp.text().await.unwrap_or_default();
+        let body = if full_body.len() > MAX_ERROR_BODY {
+            format!("{}... (truncated)", &full_body[..MAX_ERROR_BODY])
+        } else {
+            full_body
+        };
+        return Err(MinecraftError::DownloadFailed {
+            label: task.label.clone(),
+            status: status.to_string(),
+            url: task.url.clone(),
+            body,
+        });
     }
 
     let data = resp.bytes().await?;
@@ -260,7 +281,7 @@ async fn download_file(http: &reqwest::Client, task: &DownloadTask) -> Result<()
                 "SHA-1 mismatch for {}: expected {}, got {}",
                 task.label, expected, actual
             );
-            return Err(eyre!("SHA-1 verification failed for {}", task.label));
+            return Err(MinecraftError::Sha1Mismatch(task.label.clone()));
         }
     }
 
@@ -269,14 +290,24 @@ async fn download_file(http: &reqwest::Client, task: &DownloadTask) -> Result<()
 }
 
 /// Compute the hex-encoded SHA-1 hash of some data.
+///
+/// Uses a pre-allocated buffer to avoid per-byte string allocations.
 fn hex_sha1(data: &[u8]) -> String {
     let mut hasher = Sha1::new();
     hasher.update(data);
     let result = hasher.finalize();
-    result.iter().map(|b| format!("{b:02x}")).collect()
+    let mut hex = String::with_capacity(40);
+    for b in result {
+        // write! to a String is infallible
+        let _ = write!(hex, "{b:02x}");
+    }
+    hex
 }
 
-/// Get paths for all libraries that should be on the classpath.
+/// Collect paths for all libraries that should be on the classpath.
+///
+/// Evaluates platform rules to include only applicable libraries.
+/// The client JAR is appended last.
 pub fn collect_classpath(
     meta: &VersionMeta,
     libraries_dir: &Path,
@@ -322,7 +353,10 @@ pub fn collect_classpath(
     classpath
 }
 
-/// Get paths for all native library JARs that need to be extracted.
+/// Collect paths for all native library JARs that need to be extracted.
+///
+/// Evaluates platform rules and natives classifier maps to find
+/// the correct native JARs for the current OS and architecture.
 pub fn collect_native_jars(meta: &VersionMeta, libraries_dir: &Path) -> Vec<PathBuf> {
     let mut natives = Vec::new();
 
@@ -358,7 +392,14 @@ pub fn collect_native_jars(meta: &VersionMeta, libraries_dir: &Path) -> Vec<Path
     natives
 }
 
-/// Extract native libraries from their JARs into a directory.
+/// Extract native libraries (`.so`, `.dll`, `.dylib`) from their JARs into a directory.
+///
+/// Skips `META-INF` entries and directories. Only extracts files with
+/// native library extensions.
+///
+/// # Errors
+///
+/// Returns [`MinecraftError`] if a JAR file can't be opened or extraction fails.
 pub fn extract_natives(native_jars: &[PathBuf], natives_dir: &Path) -> Result<()> {
     std::fs::create_dir_all(natives_dir)?;
 

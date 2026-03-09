@@ -136,7 +136,7 @@ impl App {
                     }
                 }) => {
                     if let Ok(Some(Event::Key(key))) = maybe_event {
-                        self.handle_key(key)?;
+                        self.handle_key(key);
                     }
                 }
                 // Background task event
@@ -220,7 +220,6 @@ impl App {
             AppEvent::ManifestError(err) => {
                 self.versions.loading = false;
                 self.screen = Screen::Home;
-                // Could show a popup, for now just log
                 tracing::error!("Failed to fetch versions: {err}");
             }
 
@@ -287,11 +286,11 @@ impl App {
 
     // ── Handle keyboard input (synchronous, never blocks) ────────────
 
-    fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
+    fn handle_key(&mut self, key: KeyEvent) {
         // Global quit on Ctrl+C
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.should_quit = true;
-            return Ok(());
+            return;
         }
 
         match self.screen {
@@ -305,7 +304,7 @@ impl App {
 
     // ── Home screen ──────────────────────────────────────────────────
 
-    fn handle_home_key(&mut self, key: KeyEvent) -> Result<()> {
+    fn handle_home_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') => {
                 self.should_quit = true;
@@ -360,12 +359,11 @@ impl App {
             }
             _ => {}
         }
-        Ok(())
     }
 
     // ── Login screen ─────────────────────────────────────────────────
 
-    fn handle_login_key(&mut self, key: KeyEvent) -> Result<()> {
+    fn handle_login_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => {
                 self.screen = Screen::Home;
@@ -410,55 +408,64 @@ impl App {
                         }
                         self.screen = Screen::Home;
                     }
-                    _ => {}
+                    LoginState::WaitingForBrowser => {}
                 }
             }
             _ => {}
         }
-        Ok(())
     }
 
     // ── Version browser ──────────────────────────────────────────────
 
-    fn handle_versions_key(&mut self, key: KeyEvent) -> Result<()> {
-        // If we're in name input mode
-        if let Some(ref name) = self.versions.input_name.clone() {
+    fn handle_versions_key(&mut self, key: KeyEvent) {
+        // If we're in name input mode, handle name editing keys
+        if self.versions.input_name.is_some() {
             match key.code {
                 KeyCode::Esc => {
                     self.versions.input_name = None;
                 }
                 KeyCode::Enter => {
-                    if !name.is_empty()
-                        && let Some(ver) = self.versions.selected_version()
-                    {
-                        let ver_id = ver.id.clone();
-                        let ver_url = ver.url.clone();
-                        match self.instance_manager.create(name, &ver_id, &ver_url) {
-                            Ok(_) => {
-                                info!("Created instance '{name}' with version {ver_id}");
-                                self.refresh_instances();
-                                self.screen = Screen::Home;
+                    // Take the name out temporarily to avoid borrow conflicts
+                    let name = self.versions.input_name.take();
+                    if let Some(name) = name {
+                        if !name.is_empty() {
+                            if let Some(ver) = self.versions.selected_version() {
+                                let ver_id = &ver.id;
+                                let ver_url = &ver.url;
+                                match self.instance_manager.create(&name, ver_id, ver_url) {
+                                    Ok(_) => {
+                                        info!("Created instance '{name}' with version {ver_id}");
+                                        self.refresh_instances();
+                                        self.screen = Screen::Home;
+                                        return;
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Failed to create instance: {e}");
+                                    }
+                                }
+                            } else {
+                                // No version selected, put name back
+                                self.versions.input_name = Some(name);
                             }
-                            Err(e) => {
-                                tracing::error!("Failed to create instance: {e}");
-                                self.versions.input_name = None;
-                            }
+                        } else {
+                            // Empty name, put it back
+                            self.versions.input_name = Some(name);
                         }
                     }
                 }
                 KeyCode::Backspace => {
-                    let mut n = name.clone();
-                    n.pop();
-                    self.versions.input_name = Some(n);
+                    if let Some(ref mut name) = self.versions.input_name {
+                        name.pop();
+                    }
                 }
                 KeyCode::Char(c) => {
-                    let mut n = name.clone();
-                    n.push(c);
-                    self.versions.input_name = Some(n);
+                    if let Some(ref mut name) = self.versions.input_name {
+                        name.push(c);
+                    }
                 }
                 _ => {}
             }
-            return Ok(());
+            return;
         }
 
         match key.code {
@@ -482,12 +489,11 @@ impl App {
             }
             _ => {}
         }
-        Ok(())
     }
 
     // ── Instance detail screen ───────────────────────────────────────
 
-    fn handle_instance_key(&mut self, key: KeyEvent) -> Result<()> {
+    fn handle_instance_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => {
                 self.screen = Screen::Home;
@@ -499,17 +505,15 @@ impl App {
             }
             _ => {}
         }
-        Ok(())
     }
 
     // ── Launch screen ────────────────────────────────────────────────
 
-    fn handle_launch_key(&mut self, key: KeyEvent) -> Result<()> {
+    fn handle_launch_key(&mut self, key: KeyEvent) {
         if key.code == KeyCode::Esc {
             self.screen = Screen::Home;
             self.launch_screen = None;
         }
-        Ok(())
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
@@ -528,16 +532,15 @@ impl App {
     }
 
     /// Kick off the entire launch pipeline as a background task.
-    /// The pipeline: validate auth -> fetch metadata -> download -> extract natives -> launch -> stream output.
+    ///
+    /// Pipeline: validate auth -> fetch metadata -> download -> extract natives
+    /// -> launch -> stream output.
     fn start_launch(&mut self, instance: Instance) {
         // Check if we have auth data at all
-        let auth_data = match &self.auth_store.data {
-            Some(d) => d.clone(),
-            None => {
-                self.login = LoginScreen::new();
-                self.screen = Screen::Login;
-                return;
-            }
+        let Some(auth_data) = self.auth_store.data.clone() else {
+            self.login = LoginScreen::new();
+            self.screen = Screen::Login;
+            return;
         };
 
         // Set up the launch screen immediately
@@ -550,11 +553,10 @@ impl App {
         let tx = self.event_tx.clone();
         let http = self.http.clone();
         let config = self.config.clone();
-        let client_id = self.config.msa_client_id.clone();
 
         tokio::spawn(async move {
             if let Err(e) =
-                run_launch_pipeline(tx.clone(), http, config, client_id, auth_data, instance).await
+                run_launch_pipeline(tx.clone(), http, config, auth_data, instance).await
             {
                 let _ = tx.send(AppEvent::LaunchError(format!("{e}")));
             }
@@ -563,12 +565,13 @@ impl App {
 }
 
 /// The full launch pipeline, running on a background task.
-/// Sends `AppEvent`s back to the main loop at each stage.
+///
+/// Sends `AppEvent`s back to the main loop at each stage. Uses `color_eyre::Result`
+/// since this is a binary-level function that converts all errors to user-facing strings.
 async fn run_launch_pipeline(
     tx: mpsc::UnboundedSender<AppEvent>,
     http: reqwest::Client,
     config: Config,
-    client_id: String,
     auth_data: crate::auth::store::AuthData,
     instance: Instance,
 ) -> Result<()> {
@@ -576,19 +579,18 @@ async fn run_launch_pipeline(
     let _ = tx.send(AppEvent::LaunchStatus(
         "Validating authentication...".into(),
     ));
-    let mc_token;
-    if auth_data.mc_token_valid() {
-        mc_token = auth_data.mc_access_token.clone();
+    let mc_token = if auth_data.mc_token_valid() {
+        auth_data.mc_access_token.clone()
     } else {
         let _ = tx.send(AppEvent::LaunchStatus("Refreshing tokens...".into()));
         let mut store = AuthStore::load(&config.auth_store_path)?;
-        store.ensure_valid(&client_id, &http).await?;
-        mc_token = store
+        store.ensure_valid(&config.msa_client_id, &http).await?;
+        store
             .data
             .as_ref()
             .map(|d| d.mc_access_token.clone())
-            .ok_or_else(|| color_eyre::eyre::eyre!("Auth failed after refresh"))?;
-    }
+            .ok_or_else(|| color_eyre::eyre::eyre!("Auth failed after refresh"))?
+    };
 
     // 2. Fetch version metadata
     let _ = tx.send(AppEvent::LaunchStatus(format!(
@@ -660,16 +662,16 @@ async fn run_launch_pipeline(
     let launch_config = launch::LaunchConfig {
         java_path,
         game_dir: instance.game_dir(),
-        assets_dir: config.assets_dir.clone(),
-        libraries_dir: config.libraries_dir.clone(),
-        versions_dir: config.versions_dir.clone(),
+        assets_dir: config.assets_dir,
+        libraries_dir: config.libraries_dir,
+        versions_dir: config.versions_dir,
         natives_dir: instance.natives_dir(),
         min_memory: instance.config.min_memory_mb,
         max_memory: instance.config.max_memory_mb,
         window_width: instance.config.window_width,
         window_height: instance.config.window_height,
-        username: auth_data.profile.username.clone(),
-        uuid: auth_data.profile.uuid.clone(),
+        username: auth_data.profile.username,
+        uuid: auth_data.profile.uuid,
         access_token: mc_token,
     };
 

@@ -238,6 +238,7 @@ fn replace_tokens(template: &str, tokens: &HashMap<String, String>) -> String {
     result
 }
 
+/// Return the platform-appropriate classpath separator (`:` on Unix, `;` on Windows).
 fn classpath_separator() -> &'static str {
     if cfg!(target_os = "windows") {
         ";"
@@ -247,6 +248,9 @@ fn classpath_separator() -> &'static str {
 }
 
 /// Detect the system Java installation.
+///
+/// Searches in order: `JAVA_HOME`, `PATH` (via `which`/`where`), and common
+/// Windows install locations. Returns `None` if Java cannot be found.
 pub fn detect_java() -> Option<String> {
     let java_bin = if cfg!(target_os = "windows") {
         "java.exe"

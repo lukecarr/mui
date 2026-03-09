@@ -6,12 +6,14 @@
 use std::path::Path;
 
 use chrono::{DateTime, Duration, Utc};
-use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
+use super::AuthError;
 use super::msa::{self, MsaTokens};
 use super::xbox;
+
+type Result<T> = std::result::Result<T, AuthError>;
 
 /// The user's Minecraft profile (username + UUID).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,17 +25,17 @@ pub struct MinecraftProfile {
 /// All persistent auth data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthData {
-    /// MSA refresh token (long-lived)
+    /// MSA refresh token (long-lived).
     pub msa_refresh_token: String,
-    /// MSA access token
+    /// MSA access token.
     pub msa_access_token: String,
-    /// When the MSA token expires
+    /// When the MSA token expires.
     pub msa_expires_at: DateTime<Utc>,
-    /// Minecraft access token (used for launching)
+    /// Minecraft access token (used for launching).
     pub mc_access_token: String,
-    /// When the MC token expires
+    /// When the MC token expires.
     pub mc_expires_at: DateTime<Utc>,
-    /// Player profile
+    /// Player profile.
     pub profile: MinecraftProfile,
 }
 
@@ -57,7 +59,13 @@ pub struct AuthStore {
 }
 
 impl AuthStore {
-    /// Load auth data from disk. Returns Ok with data=None if file doesn't exist.
+    /// Load auth data from disk.
+    ///
+    /// Returns `Ok` with `data: None` if the file doesn't exist or can't be parsed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthError::Io`] if the file exists but can't be read.
     pub fn load(path: &Path) -> Result<Self> {
         let path = path.to_path_buf();
         if path.exists() {
@@ -81,6 +89,14 @@ impl AuthStore {
     }
 
     /// Save current auth data to disk.
+    ///
+    /// On Unix, sets file permissions to `0o600` (owner-only) since the file
+    /// contains sensitive tokens.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthError::Json`] if serialization fails, or [`AuthError::Io`]
+    /// if writing to disk fails.
     pub fn save(&self) -> Result<()> {
         if let Some(ref data) = self.data {
             let json = serde_json::to_string_pretty(data)?;
@@ -102,7 +118,18 @@ impl AuthStore {
     }
 
     /// Perform a fresh login (opens browser).
-    pub async fn login(&mut self, client_id: &str, http: &reqwest::Client) -> Result<()> {
+    ///
+    /// Runs the full 6-step auth chain: MSA -> Xbox Live -> XSTS -> MC login
+    /// -> entitlements check -> profile fetch. Saves the result to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthError`] if any step of the auth chain fails.
+    pub async fn login(
+        &mut self,
+        client_id: &str,
+        http: &reqwest::Client,
+    ) -> Result<()> {
         // Step 1: Microsoft OAuth2
         let msa = msa::login(client_id, http).await?;
         let msa_expires_at = Utc::now() + Duration::seconds(msa.expires_in as i64);
@@ -118,9 +145,7 @@ impl AuthStore {
         // Step 5: Check entitlements
         let owns_game = super::minecraft::check_entitlements(&mc.access_token, http).await?;
         if !owns_game {
-            return Err(color_eyre::eyre::eyre!(
-                "This account does not own Minecraft"
-            ));
+            return Err(AuthError::NotOwned);
         }
 
         // Step 6: Get profile
@@ -140,8 +165,19 @@ impl AuthStore {
         Ok(())
     }
 
-    /// Refresh tokens if needed. Returns Ok(true) if tokens are valid.
-    pub async fn ensure_valid(&mut self, client_id: &str, http: &reqwest::Client) -> Result<bool> {
+    /// Refresh tokens if needed.
+    ///
+    /// Returns `Ok(true)` if tokens are valid (either already valid or
+    /// successfully refreshed), `Ok(false)` if not logged in.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthError`] if the refresh flow fails.
+    pub async fn ensure_valid(
+        &mut self,
+        client_id: &str,
+        http: &reqwest::Client,
+    ) -> Result<bool> {
         let data = match &self.data {
             Some(d) => d,
             None => return Ok(false), // Not logged in

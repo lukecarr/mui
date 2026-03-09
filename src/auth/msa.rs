@@ -7,10 +7,12 @@
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 
-use color_eyre::Result;
-use color_eyre::eyre::eyre;
 use serde::Deserialize;
 use tracing::{debug, info};
+
+use super::AuthError;
+
+type Result<T> = std::result::Result<T, AuthError>;
 
 const AUTHORIZE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
@@ -29,7 +31,7 @@ struct TokenResponse {
     access_token: String,
     refresh_token: Option<String>,
     expires_in: u64,
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "field required for serde deserialization")]
     token_type: String,
 }
 
@@ -62,12 +64,13 @@ pub async fn login(client_id: &str, http: &reqwest::Client) -> Result<MsaTokens>
 
     // Open the browser
     info!("Opening browser for Microsoft login...");
-    open::that(&auth_url)?;
+    open::that(&auth_url).map_err(AuthError::Browser)?;
 
     // Wait for the redirect (blocking, so we run on a blocking thread)
     let code = {
         let redirect_uri_clone = redirect_uri.clone();
-        tokio::task::spawn_blocking(move || wait_for_code(listener, &redirect_uri_clone)).await??
+        tokio::task::spawn_blocking(move || wait_for_code(listener, &redirect_uri_clone))
+            .await??
     };
 
     debug!("Received authorization code");
@@ -117,7 +120,7 @@ fn wait_for_code(listener: TcpListener, _redirect_uri: &str) -> Result<String> {
                 .find(|(k, _)| k == "code")
                 .map(|(_, v)| v.to_string())
         })
-        .ok_or_else(|| eyre!("No authorization code found in redirect URL: {request_line}"))?;
+        .ok_or_else(|| AuthError::NoAuthCode(request_line.clone()))?;
 
     // Send a nice response to the browser
     let body = "<!DOCTYPE html><html><body>\
@@ -161,13 +164,15 @@ async fn parse_token_response(resp: reqwest::Response) -> Result<MsaTokens> {
 
     if !status.is_success() {
         if let Ok(err) = serde_json::from_str::<TokenErrorResponse>(&body) {
-            return Err(eyre!(
-                "MSA token error: {} - {}",
-                err.error,
-                err.error_description.unwrap_or_default()
-            ));
+            return Err(AuthError::MsaToken {
+                error: err.error,
+                description: err.error_description.unwrap_or_default(),
+            });
         }
-        return Err(eyre!("MSA token request failed ({}): {}", status, body));
+        return Err(AuthError::MsaRequest {
+            status: status.to_string(),
+            body,
+        });
     }
 
     let tokens: TokenResponse = serde_json::from_str(&body)?;

@@ -4,10 +4,12 @@
 //! - Exchange MSA token for Xbox Live User Token
 //! - Exchange XBL User Token for XSTS Authorization Token
 
-use color_eyre::Result;
-use color_eyre::eyre::eyre;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
+
+use super::AuthError;
+
+type Result<T> = std::result::Result<T, AuthError>;
 
 const XBL_AUTH_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XSTS_AUTH_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
@@ -83,6 +85,11 @@ struct XstsError {
     message: Option<String>,
 }
 
+// Xbox error codes are fixed protocol values, not arbitrary numbers.
+const XERR_NO_XBOX_PROFILE: u64 = 2_148_916_233;
+const XERR_REGION_BLOCKED: u64 = 2_148_916_235;
+const XERR_MINOR_FAMILY: u64 = 2_148_916_238;
+
 /// Exchange an MSA access token for an Xbox Live User Token.
 pub async fn get_user_token(msa_token: &str, http: &reqwest::Client) -> Result<XboxToken> {
     debug!("Exchanging MSA token for Xbox Live User Token...");
@@ -139,13 +146,13 @@ async fn parse_xbox_response(resp: reqwest::Response, label: &str) -> Result<Xbo
     if !status.is_success() {
         if let Ok(err) = serde_json::from_str::<XstsError>(&body) {
             let msg = match err.xerr {
-                Some(2148916233) => "This Microsoft account does not have an Xbox Live profile. \
+                Some(XERR_NO_XBOX_PROFILE) => "This Microsoft account does not have an Xbox Live profile. \
                                      You may need to sign up at xbox.com."
                     .to_string(),
-                Some(2148916235) => {
+                Some(XERR_REGION_BLOCKED) => {
                     "Xbox Live is not available in your country/region.".to_string()
                 }
-                Some(2148916238) => "This account belongs to a minor and must be added to a \
+                Some(XERR_MINOR_FAMILY) => "This account belongs to a minor and must be added to a \
                      Microsoft Family to use Xbox Live."
                     .to_string(),
                 Some(code) => format!(
@@ -157,9 +164,16 @@ async fn parse_xbox_response(resp: reqwest::Response, label: &str) -> Result<Xbo
                     err.message.as_deref().unwrap_or("unknown")
                 ),
             };
-            return Err(eyre!("{label} failed: {msg}"));
+            return Err(AuthError::Xbox {
+                label: label.to_string(),
+                message: msg,
+            });
         }
-        return Err(eyre!("{label} request failed ({}): {}", status, body));
+        return Err(AuthError::XboxRequest {
+            label: label.to_string(),
+            status: status.to_string(),
+            body,
+        });
     }
 
     let resp: XTokenResponse = serde_json::from_str(&body)?;
@@ -167,7 +181,7 @@ async fn parse_xbox_response(resp: reqwest::Response, label: &str) -> Result<Xbo
         .display_claims
         .xui
         .first()
-        .ok_or_else(|| eyre!("{label} response missing user hash"))?
+        .ok_or_else(|| AuthError::XboxMissingHash(label.to_string()))?
         .uhs
         .clone();
 

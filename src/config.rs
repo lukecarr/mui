@@ -1,3 +1,5 @@
+//! Global application configuration: data directories, client ID, and paths.
+
 use std::path::PathBuf;
 
 use color_eyre::Result;
@@ -29,6 +31,14 @@ pub struct Config {
 
 impl Config {
     /// Initialize configuration using platform-appropriate directories.
+    ///
+    /// Uses XDG base directories on Linux (e.g., `~/.local/share/mui`).
+    /// Creates all required subdirectories if they don't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if directory creation fails or platform data
+    /// directory cannot be determined.
     pub fn load() -> Result<Self> {
         let project_dirs = ProjectDirs::from("", "", "mui")
             .ok_or_else(|| color_eyre::eyre::eyre!("Could not determine data directory"))?;

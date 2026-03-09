@@ -10,26 +10,37 @@ use tracing::debug;
 const VERSION_MANIFEST_URL: &str =
     "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 
+/// The top-level version manifest listing all available Minecraft versions.
 #[derive(Debug, Clone, Deserialize)]
 pub struct VersionManifest {
+    /// Latest release and snapshot version IDs.
     pub latest: LatestVersions,
+    /// All available versions.
     pub versions: Vec<VersionEntry>,
 }
 
+/// Latest stable and snapshot version identifiers.
 #[derive(Debug, Clone, Deserialize)]
 pub struct LatestVersions {
+    /// Latest stable release version ID (e.g., "1.21.4").
     pub release: String,
+    /// Latest snapshot version ID.
     pub snapshot: String,
 }
 
+/// A single version entry from the manifest.
 #[derive(Debug, Clone, Deserialize)]
 pub struct VersionEntry {
+    /// Version identifier (e.g., "1.21.4").
     pub id: String,
+    /// Version type category.
     #[serde(rename = "type")]
     pub version_type: VersionType,
+    /// URL to the version's metadata JSON.
     pub url: String,
 }
 
+/// Category of a Minecraft version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VersionType {

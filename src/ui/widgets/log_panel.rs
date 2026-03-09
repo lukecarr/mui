@@ -7,11 +7,11 @@
 use std::sync::{Arc, Mutex};
 
 use ratatui::{
-    Frame,
     layout::Rect,
     style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
+    Frame,
 };
 use tracing_subscriber::Layer;
 
@@ -40,6 +40,8 @@ impl LogBuffer {
 
     /// Push a line at a given level.
     fn push(&self, level: tracing::Level, text: String) {
+        // Mutex poisoning indicates an unrecoverable bug in a logging thread;
+        // panicking here is the correct behavior.
         let mut lines = self.inner.lock().unwrap();
         lines.push(LogLine { level, text });
         if lines.len() > MAX_LOG_LINES {
@@ -55,6 +57,8 @@ impl LogBuffer {
 
     /// Get the most recent `n` lines for rendering.
     fn recent(&self, n: usize) -> Vec<LogLine> {
+        // Mutex poisoning indicates an unrecoverable bug in a logging thread;
+        // panicking here is the correct behavior.
         let lines = self.inner.lock().unwrap();
         let start = lines.len().saturating_sub(n);
         lines[start..].to_vec()
@@ -166,8 +170,7 @@ impl tracing::field::Visit for MessageVisitor {
             if !self.fields.is_empty() {
                 self.fields.push(' ');
             }
-            self.fields
-                .push_str(&format!("{}={}", field.name(), value));
+            self.fields.push_str(&format!("{}={}", field.name(), value));
         }
     }
 
