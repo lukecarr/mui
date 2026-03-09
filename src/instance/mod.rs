@@ -8,6 +8,10 @@ pub enum InstanceError {
     #[error("Instance directory already exists: {0}")]
     AlreadyExists(String),
 
+    /// The instance name is invalid (empty, or would cause path traversal).
+    #[error("Invalid instance name: {0}")]
+    InvalidName(String),
+
     /// IO error during instance operations.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

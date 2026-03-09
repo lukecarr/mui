@@ -441,6 +441,8 @@ impl App {
                                     }
                                     Err(e) => {
                                         tracing::error!("Failed to create instance: {e}");
+                                        // Put name back so user can fix it
+                                        self.versions.input_name = Some(name);
                                     }
                                 }
                             } else {
