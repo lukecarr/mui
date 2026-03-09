@@ -6,6 +6,7 @@ mod app;
 mod auth;
 mod config;
 mod instance;
+mod java;
 mod minecraft;
 mod ui;
 

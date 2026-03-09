@@ -1,23 +1,29 @@
 //! Instance detail/settings screen.
 
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
+    Frame,
 };
 
 use crate::instance::manager::Instance;
+use crate::java::{detect, runtime};
 use crate::ui::theme;
 
 pub struct InstanceScreen {
     pub instance: Option<Instance>,
+    /// Path to the MUI-managed Java directory, for checking installed runtimes.
+    pub java_dir: std::path::PathBuf,
 }
 
 impl InstanceScreen {
-    pub fn new() -> Self {
-        Self { instance: None }
+    pub fn new(java_dir: std::path::PathBuf) -> Self {
+        Self {
+            instance: None,
+            java_dir,
+        }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
@@ -46,10 +52,48 @@ impl InstanceScreen {
         frame.render_widget(header, chunks[0]);
 
         // Details
-        let java_path = inst.config.java_path.as_deref().unwrap_or("(auto-detect)");
         let last_played = crate::ui::format_last_played(inst.config.last_played.as_deref());
 
-        let lines = vec![
+        // Resolve Java info for display
+        let resolved = detect::resolve_java(
+            &self.java_dir,
+            None, // We don't have version meta here, so skip component check
+            None,
+            inst.config.java_path.as_deref(),
+        );
+        let java_display = match &resolved {
+            Some(java) => {
+                let version_str = java
+                    .major_version
+                    .map(|v| format!("Java {v}"))
+                    .unwrap_or_else(|| "unknown version".to_string());
+                let source_str = match &java.source {
+                    detect::JavaSource::InstanceOverride => "override",
+                    detect::JavaSource::Managed { component } => component.as_str(),
+                    detect::JavaSource::System => "system",
+                };
+                format!("{} ({source_str})", version_str)
+            }
+            None => "(not found)".to_string(),
+        };
+        let java_path_display = resolved
+            .as_ref()
+            .map(|j| j.path.as_str())
+            .unwrap_or("(auto-detect)");
+
+        // Show managed runtimes installed
+        let installed_runtimes = runtime::list_installed(&self.java_dir);
+        let managed_display = if installed_runtimes.is_empty() {
+            "none".to_string()
+        } else {
+            installed_runtimes
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        let mut lines = vec![
             Line::from(""),
             Line::from(vec![
                 Span::styled(
@@ -86,7 +130,21 @@ impl InstanceScreen {
                     "  Java:        ",
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(java_path, theme::normal_style()),
+                Span::styled(&java_display, theme::normal_style()),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "  Java path:   ",
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(java_path_display, theme::dim_style()),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "  Managed JRE: ",
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(&managed_display, theme::dim_style()),
             ]),
             Line::from(vec![
                 Span::styled(
@@ -103,6 +161,16 @@ impl InstanceScreen {
                 Span::styled(inst.dir.to_string_lossy().to_string(), theme::dim_style()),
             ]),
         ];
+
+        if !inst.config.jvm_args.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "  JVM args:    ",
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(inst.config.jvm_args.join(" "), theme::dim_style()),
+            ]));
+        }
 
         let details = Paragraph::new(lines).block(
             Block::default()

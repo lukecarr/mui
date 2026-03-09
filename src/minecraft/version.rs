@@ -13,6 +13,23 @@ use color_eyre::Result;
 use serde::Deserialize;
 use tracing::debug;
 
+/// Java version requirement from Mojang's version metadata.
+///
+/// Maps to the `javaVersion` object in the version JSON, which specifies
+/// which Java runtime component is required (e.g., `"java-runtime-delta"`)
+/// and the minimum major version (e.g., `21`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct JavaVersionInfo {
+    /// Mojang runtime component name (e.g., `"java-runtime-delta"`, `"jre-legacy"`).
+    ///
+    /// These map to entries in the Mojang Java runtime manifest at
+    /// `https://launchermeta.mojang.com/v1/products/java-runtime/…/all.json`.
+    pub component: String,
+    /// Required Java major version (e.g., `8`, `17`, `21`).
+    #[serde(rename = "majorVersion")]
+    pub major_version: u32,
+}
+
 /// Top-level version metadata for a specific Minecraft version.
 ///
 /// Parsed from the version metadata JSON linked in the version manifest.
@@ -26,6 +43,13 @@ pub struct VersionMeta {
     /// Fully-qualified Java main class to launch.
     #[serde(rename = "mainClass")]
     pub main_class: String,
+
+    /// Java version requirement for this Minecraft version.
+    ///
+    /// Present on modern versions (1.7+). Older versions without this field
+    /// default to Java 8 / `"jre-legacy"`.
+    #[serde(rename = "javaVersion")]
+    pub java_version: Option<JavaVersionInfo>,
 
     /// Modern argument format (1.13+).
     pub arguments: Option<Arguments>,
