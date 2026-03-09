@@ -26,7 +26,7 @@ pub struct DownloadProgress {
     pub total_files: usize,
     /// Number of files downloaded so far.
     pub completed_files: usize,
-    /// Label of the file currently being downloaded.
+    /// Label of the last downloaded file.
     pub current_file: String,
 }
 
@@ -204,8 +204,12 @@ pub async fn download_version(
         let progress_tx = progress_tx.clone();
 
         join_set.spawn(async move {
-            let _permit = sem.acquire().await.unwrap();
+            let permit = match sem.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => return Ok(()), // semaphore closed; graceful shutdown
+            };
             download_file(&http, &task).await?;
+            drop(permit); // release before sending progress to avoid throttling downloads
             let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
             if let Some(tx) = progress_tx {
                 let _ = tx
