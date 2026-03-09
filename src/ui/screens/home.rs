@@ -25,9 +25,13 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
-use crate::instance::manager::Instance;
-use crate::ui::theme;
-use crate::ui::widgets::log_panel::{self, LogBuffer};
+use crate::{
+    instance::manager::Instance,
+    ui::{
+        theme,
+        widgets::log_panel::{self, LogBuffer},
+    },
+};
 
 pub struct HomeScreen {
     pub list_state: ListState,

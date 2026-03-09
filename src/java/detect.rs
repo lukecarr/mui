@@ -8,8 +8,10 @@
 //! 3. System Java (`JAVA_HOME`, `PATH`, common install locations) with major version validation
 //! 4. Error with a helpful message
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use tracing::{debug, info, warn};
 
@@ -148,10 +150,31 @@ fn detect_system_java(required_major: Option<u32>) -> Option<ResolvedJava> {
     let mut candidates: Vec<String> = Vec::new();
 
     // 1. JAVA_HOME
+    //
+    // JAVA_HOME is a user-controlled environment variable. We validate that
+    // it is a real, absolute directory and that the resolved binary lives
+    // within it (via canonicalization) to guard against path traversal.
     if let Ok(java_home) = std::env::var("JAVA_HOME") {
-        let java_path = Path::new(&java_home).join("bin").join(java_bin);
-        if java_path.exists() {
-            candidates.push(java_path.to_string_lossy().to_string());
+        let home_path = Path::new(&java_home);
+        if home_path.is_absolute() && home_path.is_dir() {
+            let java_path = home_path.join("bin").join(java_bin);
+            if java_path.exists() {
+                // Canonicalize both paths and verify the binary is inside JAVA_HOME
+                if let (Ok(canon_home), Ok(canon_java)) =
+                    (home_path.canonicalize(), java_path.canonicalize())
+                {
+                    if canon_java.starts_with(&canon_home) {
+                        candidates.push(canon_java.to_string_lossy().to_string());
+                    } else {
+                        warn!(
+                            "JAVA_HOME binary resolved outside JAVA_HOME (symlink escape?): {}",
+                            canon_java.display()
+                        );
+                    }
+                }
+            }
+        } else {
+            debug!("Ignoring non-absolute or non-existent JAVA_HOME: {java_home}");
         }
     }
 

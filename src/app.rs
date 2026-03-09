@@ -8,23 +8,26 @@ use std::time::Duration;
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Frame;
-use tokio::io::AsyncBufReadExt;
-use tokio::sync::mpsc;
+use tokio::{io::AsyncBufReadExt, sync::mpsc};
 use tracing::info;
 
-use crate::auth::AuthStore;
-use crate::config::Config;
-use crate::instance::manager::{Instance, InstanceManager};
-use crate::java::{detect, runtime};
-use crate::minecraft::{download, launch, manifest, version};
-use crate::ui::screens::{
-    home::HomeScreen,
-    instance::InstanceScreen,
-    launch::{LaunchScreen, LaunchState},
-    login::{LoginScreen, LoginState},
-    versions::VersionsScreen,
+use crate::{
+    auth::AuthStore,
+    config::Config,
+    instance::manager::{Instance, InstanceManager},
+    java::{detect, runtime},
+    minecraft::{download, launch, manifest, version},
+    ui::{
+        screens::{
+            home::HomeScreen,
+            instance::InstanceScreen,
+            launch::{LaunchScreen, LaunchState},
+            login::{LoginScreen, LoginState},
+            versions::VersionsScreen,
+        },
+        widgets::log_panel::{self, LogBuffer},
+    },
 };
-use crate::ui::widgets::log_panel::{self, LogBuffer};
 
 /// Events sent from background tasks back to the main event loop.
 enum AppEvent {
@@ -356,7 +359,7 @@ impl App {
             }
             KeyCode::Char('e') => {
                 if let Some(inst) = self.home.selected_instance() {
-                    self.instance_screen.instance = Some(inst.clone());
+                    self.instance_screen.set_instance(Some(inst.clone()));
                     self.screen = Screen::Instance;
                 }
             }
@@ -560,8 +563,7 @@ impl App {
         let config = self.config.clone();
 
         tokio::spawn(async move {
-            if let Err(e) =
-                run_launch_pipeline(tx.clone(), http, config, auth_data, instance).await
+            if let Err(e) = run_launch_pipeline(tx.clone(), http, config, auth_data, instance).await
             {
                 let _ = tx.send(AppEvent::LaunchError(format!("{e}")));
             }

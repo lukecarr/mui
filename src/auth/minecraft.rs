@@ -8,9 +8,7 @@
 use serde::Deserialize;
 use tracing::{debug, info};
 
-use super::AuthError;
-use super::store::MinecraftProfile;
-use super::xbox::XboxToken;
+use super::{AuthError, store::MinecraftProfile, xbox::XboxToken};
 
 type Result<T> = std::result::Result<T, AuthError>;
 

@@ -22,6 +22,7 @@ pub struct InstanceConfig {
     /// Window height
     pub window_height: u32,
     /// Custom JVM arguments
+    #[serde(default)]
     pub jvm_args: Vec<String>,
     /// When this instance was created
     pub created_at: String,

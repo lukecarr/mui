@@ -1,16 +1,15 @@
 //! Build JVM command line and spawn the Minecraft game process.
 
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::process::Stdio;
+use std::{collections::HashMap, path::PathBuf, process::Stdio};
 
 use color_eyre::Result;
 use tokio::process::Command;
 use tracing::{debug, info};
 
-use super::download;
-use super::rules;
-use super::version::{ArgumentValue, ArgumentValueInner, VersionMeta};
+use super::{
+    download, rules,
+    version::{ArgumentValue, ArgumentValueInner, VersionMeta},
+};
 
 /// Configuration for launching Minecraft.
 #[derive(Debug, Clone)]
@@ -150,7 +149,6 @@ pub async fn launch(meta: &VersionMeta, config: &LaunchConfig) -> Result<tokio::
     info!("Launching Minecraft {}...", meta.id);
     debug!("Java: {}", config.java_path);
 
-
     // Ensure game directory exists
     tokio::fs::create_dir_all(&config.game_dir).await?;
 
@@ -253,5 +251,3 @@ fn classpath_separator() -> &'static str {
         ":"
     }
 }
-
-

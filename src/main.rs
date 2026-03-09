@@ -12,9 +12,7 @@ mod ui;
 
 use color_eyre::Result;
 use tracing::info;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::ui::widgets::{LogBuffer, TuiLogLayer};
 

@@ -1,21 +1,27 @@
 //! Instance detail/settings screen.
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
-use crate::instance::manager::Instance;
-use crate::java::{detect, runtime};
-use crate::ui::theme;
+use crate::{
+    instance::manager::Instance,
+    java::{detect, runtime},
+    ui::theme,
+};
 
 pub struct InstanceScreen {
     pub instance: Option<Instance>,
     /// Path to the MUI-managed Java directory, for checking installed runtimes.
-    pub java_dir: std::path::PathBuf,
+    java_dir: std::path::PathBuf,
+
+    // Cached values — computed once when the instance is set, not on every render.
+    cached_java: Option<detect::ResolvedJava>,
+    cached_runtimes: Vec<(String, std::path::PathBuf)>,
 }
 
 impl InstanceScreen {
@@ -23,7 +29,28 @@ impl InstanceScreen {
         Self {
             instance: None,
             java_dir,
+            cached_java: None,
+            cached_runtimes: Vec::new(),
         }
+    }
+
+    /// Set the instance to display and recompute cached Java info.
+    ///
+    /// This performs the expensive work (spawning `java -version`, scanning
+    /// the filesystem) once up front, so [`render()`](Self::render) stays
+    /// non-blocking.
+    pub fn set_instance(&mut self, instance: Option<Instance>) {
+        // Recompute caches before storing the instance
+        self.cached_java = instance.as_ref().and_then(|inst| {
+            detect::resolve_java(
+                &self.java_dir,
+                None, // We don't have version meta here, so skip component check
+                None,
+                inst.config.java_path.as_deref(),
+            )
+        });
+        self.cached_runtimes = runtime::list_installed(&self.java_dir);
+        self.instance = instance;
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
@@ -51,17 +78,10 @@ impl InstanceScreen {
             .block(Block::default().borders(Borders::BOTTOM));
         frame.render_widget(header, chunks[0]);
 
-        // Details
+        // Details — read from cached values (computed in set_instance)
         let last_played = crate::ui::format_last_played(inst.config.last_played.as_deref());
 
-        // Resolve Java info for display
-        let resolved = detect::resolve_java(
-            &self.java_dir,
-            None, // We don't have version meta here, so skip component check
-            None,
-            inst.config.java_path.as_deref(),
-        );
-        let java_display = match &resolved {
+        let java_display = match &self.cached_java {
             Some(java) => {
                 let version_str = java
                     .major_version
@@ -76,17 +96,16 @@ impl InstanceScreen {
             }
             None => "(not found)".to_string(),
         };
-        let java_path_display = resolved
+        let java_path_display = self
+            .cached_java
             .as_ref()
             .map(|j| j.path.as_str())
             .unwrap_or("(auto-detect)");
 
-        // Show managed runtimes installed
-        let installed_runtimes = runtime::list_installed(&self.java_dir);
-        let managed_display = if installed_runtimes.is_empty() {
+        let managed_display = if self.cached_runtimes.is_empty() {
             "none".to_string()
         } else {
-            installed_runtimes
+            self.cached_runtimes
                 .iter()
                 .map(|(name, _)| name.as_str())
                 .collect::<Vec<_>>()

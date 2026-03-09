@@ -8,8 +8,7 @@ use std::path::{Component, Path, PathBuf};
 
 use tracing::{debug, info};
 
-use super::config::InstanceConfig;
-use super::InstanceError;
+use super::{InstanceError, config::InstanceConfig};
 
 type Result<T> = std::result::Result<T, InstanceError>;
 

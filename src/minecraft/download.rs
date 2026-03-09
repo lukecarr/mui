@@ -2,20 +2,27 @@
 //!
 //! Downloads files with SHA-1 verification and progress reporting via a channel.
 
-use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::{
+    fmt::Write as _,
+    path::{Path, PathBuf},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 
 use digest::Digest;
 use sha1::Sha1;
-use tokio::sync::{mpsc, Semaphore};
-use tokio::task::JoinSet;
+use tokio::{
+    sync::{Semaphore, mpsc},
+    task::JoinSet,
+};
 use tracing::{debug, info, warn};
 
-use super::MinecraftError;
-use super::rules;
-use super::version::{AssetIndex, VersionMeta};
+use super::{
+    MinecraftError, rules,
+    version::{AssetIndex, VersionMeta},
+};
 
 type Result<T> = std::result::Result<T, MinecraftError>;
 

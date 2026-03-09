@@ -15,18 +15,24 @@
 //! Each component's manifest lists every file with download URLs (raw + lzma),
 //! SHA-1 hashes, and executable flags.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 
 use color_eyre::Result;
 use digest::Digest;
 use serde::Deserialize;
 use sha1::Sha1;
-use tokio::sync::mpsc;
-use tokio::task::JoinSet;
+use tokio::{sync::mpsc, task::JoinSet};
+#[cfg(not(windows))]
 use tracing::{debug, info};
+#[cfg(windows)]
+use tracing::{debug, info, warn};
 
 use crate::minecraft::download::DownloadProgress;
 
@@ -134,21 +140,52 @@ pub struct FileDownloadInfo {
 /// - `windows-x64`, `windows-x86`, `windows-arm64`
 pub fn current_platform() -> &'static str {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    { "linux" }
+    {
+        "linux"
+    }
     #[cfg(all(target_os = "linux", target_arch = "x86"))]
-    { "linux-i386" }
+    {
+        "linux-i386"
+    }
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    { "linux" } // Mojang doesn't provide linux-arm64; fall back to linux
+    {
+        "linux"
+    } // Mojang doesn't provide linux-arm64; fall back to linux
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    { "mac-os-arm64" }
+    {
+        "mac-os-arm64"
+    }
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    { "mac-os" }
+    {
+        "mac-os"
+    }
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    { "windows-x64" }
+    {
+        "windows-x64"
+    }
     #[cfg(all(target_os = "windows", target_arch = "x86"))]
-    { "windows-x86" }
+    {
+        "windows-x86"
+    }
     #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
-    { "windows-arm64" }
+    {
+        "windows-arm64"
+    }
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "x86"),
+        all(target_os = "linux", target_arch = "aarch64"),
+        all(target_os = "macos", target_arch = "aarch64"),
+        all(target_os = "macos", target_arch = "x86_64"),
+        all(target_os = "windows", target_arch = "x86_64"),
+        all(target_os = "windows", target_arch = "x86"),
+        all(target_os = "windows", target_arch = "aarch64"),
+    )))]
+    compile_error!(
+        "Unsupported platform/architecture for MUI managed Java runtimes. \
+         Supported: linux (x86_64/x86/aarch64), macOS (x86_64/aarch64), \
+         Windows (x86_64/x86/aarch64)."
+    );
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
@@ -165,10 +202,7 @@ pub async fn fetch_runtime_index(http: &reqwest::Client) -> Result<RuntimeIndex>
 ///
 /// Returns the first (most recent) entry for the component, or `None` if
 /// the component is not available for this platform.
-pub fn find_component<'a>(
-    index: &'a RuntimeIndex,
-    component: &str,
-) -> Option<&'a RuntimeEntry> {
+pub fn find_component<'a>(index: &'a RuntimeIndex, component: &str) -> Option<&'a RuntimeEntry> {
     let platform = current_platform();
     index
         .get(platform)
@@ -179,18 +213,30 @@ pub fn find_component<'a>(
 /// Return the path to the `java` binary for a managed runtime component.
 ///
 /// Returns `None` if the runtime is not installed.
+///
+/// On macOS, Mojang's runtimes use a `jre.bundle` structure, so the binary
+/// lives at `<component>/jre.bundle/Contents/Home/bin/java` rather than
+/// `<component>/bin/java`.
 pub fn get_java_path(java_dir: &Path, component: &str) -> Option<PathBuf> {
-    let java_bin = if cfg!(target_os = "windows") {
-        "bin/java.exe"
+    let component_dir = java_dir.join(component);
+
+    // Check platform-specific paths in order of likelihood
+    let candidates: &[&str] = if cfg!(target_os = "windows") {
+        &["bin/java.exe"]
+    } else if cfg!(target_os = "macos") {
+        &["jre.bundle/Contents/Home/bin/java", "bin/java"]
     } else {
-        "bin/java"
+        &["bin/java"]
     };
-    let path = java_dir.join(component).join(java_bin);
-    if path.exists() {
-        Some(path)
-    } else {
-        None
+
+    for candidate in candidates {
+        let path = component_dir.join(candidate);
+        if path.exists() {
+            return Some(path);
+        }
     }
+
+    None
 }
 
 /// Check whether a managed runtime component is installed.
@@ -251,7 +297,10 @@ pub async fn download_runtime(
 
     for (path, file) in &manifest.files {
         match file {
-            ComponentFile::File { downloads, executable } => {
+            ComponentFile::File {
+                downloads,
+                executable,
+            } => {
                 if let Some(dl) = downloads {
                     let file_path = component_dir.join(path);
 
@@ -360,14 +409,31 @@ pub async fn download_runtime(
         if let Some(parent) = link_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        // On Windows, try file symlink (may require developer mode or admin)
-        let _ = tokio::fs::symlink_file(target, &link_path).await;
+        // On Windows, try file symlink first (requires developer mode or admin).
+        // If that fails, fall back to copying the target file instead.
+        if let Err(e) = tokio::fs::symlink_file(target, &link_path).await {
+            warn!(
+                "Symlink creation failed for {path} -> {target}: {e}. \
+                 Falling back to file copy."
+            );
+            // Resolve the target path relative to the link's parent directory
+            let target_path = link_path
+                .parent()
+                .map(|p| p.join(target))
+                .unwrap_or_else(|| component_dir.join(target));
+            if target_path.exists() {
+                tokio::fs::copy(&target_path, &link_path).await?;
+            } else {
+                warn!(
+                    "Copy fallback failed: target {target} does not exist at {}",
+                    target_path.display()
+                );
+            }
+        }
     }
 
     let java_path = get_java_path(java_dir, component).ok_or_else(|| {
-        color_eyre::eyre::eyre!(
-            "Java binary not found after installing runtime '{component}'"
-        )
+        color_eyre::eyre::eyre!("Java binary not found after installing runtime '{component}'")
     })?;
 
     info!(
