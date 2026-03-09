@@ -430,9 +430,9 @@ impl App {
                     if let Some(name) = name {
                         if !name.is_empty() {
                             if let Some(ver) = self.versions.selected_version() {
-                                let ver_id = ver.id.clone();
-                                let ver_url = ver.url.clone();
-                                match self.instance_manager.create(&name, &ver_id, &ver_url) {
+                                let ver_id = &ver.id;
+                                let ver_url = &ver.url;
+                                match self.instance_manager.create(&name, ver_id, ver_url) {
                                     Ok(_) => {
                                         info!("Created instance '{name}' with version {ver_id}");
                                         self.refresh_instances();

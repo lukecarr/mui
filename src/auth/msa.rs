@@ -70,8 +70,7 @@ pub async fn login(client_id: &str, http: &reqwest::Client) -> Result<MsaTokens>
     let code = {
         let redirect_uri_clone = redirect_uri.clone();
         tokio::task::spawn_blocking(move || wait_for_code(listener, &redirect_uri_clone))
-            .await
-            .map_err(|e| AuthError::Io(std::io::Error::other(e)))??
+            .await??
     };
 
     debug!("Received authorization code");

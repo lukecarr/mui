@@ -43,8 +43,15 @@ pub enum AuthError {
     NoAuthCode(String),
 
     /// Failed to open the browser for OAuth login.
+    ///
+    /// Kept separate from [`Io`](AuthError::Io) so callers can distinguish
+    /// browser failures from general IO errors.
     #[error("Failed to open browser: {0}")]
-    Browser(std::io::Error),
+    Browser(#[source] std::io::Error),
+
+    /// A spawned blocking task failed to join (panic or cancellation).
+    #[error("Task join error: {0}")]
+    Join(#[from] tokio::task::JoinError),
 
     /// Xbox Live / XSTS authentication failed with a known error.
     #[error("Xbox auth failed for {label}: {message}")]

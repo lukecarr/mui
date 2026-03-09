@@ -6,13 +6,14 @@
 use std::path::Path;
 
 use chrono::{DateTime, Duration, Utc};
-use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 use super::AuthError;
 use super::msa::{self, MsaTokens};
 use super::xbox;
+
+type Result<T> = std::result::Result<T, AuthError>;
 
 /// The user's Minecraft profile (username + UUID).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +62,10 @@ impl AuthStore {
     /// Load auth data from disk.
     ///
     /// Returns `Ok` with `data: None` if the file doesn't exist or can't be parsed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthError::Io`] if the file exists but can't be read.
     pub fn load(path: &Path) -> Result<Self> {
         let path = path.to_path_buf();
         if path.exists() {
@@ -87,6 +92,11 @@ impl AuthStore {
     ///
     /// On Unix, sets file permissions to `0o600` (owner-only) since the file
     /// contains sensitive tokens.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthError::Json`] if serialization fails, or [`AuthError::Io`]
+    /// if writing to disk fails.
     pub fn save(&self) -> Result<()> {
         if let Some(ref data) = self.data {
             let json = serde_json::to_string_pretty(data)?;
@@ -119,7 +129,7 @@ impl AuthStore {
         &mut self,
         client_id: &str,
         http: &reqwest::Client,
-    ) -> std::result::Result<(), AuthError> {
+    ) -> Result<()> {
         // Step 1: Microsoft OAuth2
         let msa = msa::login(client_id, http).await?;
         let msa_expires_at = Utc::now() + Duration::seconds(msa.expires_in as i64);
@@ -150,7 +160,7 @@ impl AuthStore {
             profile,
         });
 
-        self.save().map_err(|e| AuthError::Io(std::io::Error::other(e)))?;
+        self.save()?;
         info!("Login complete!");
         Ok(())
     }
@@ -167,7 +177,7 @@ impl AuthStore {
         &mut self,
         client_id: &str,
         http: &reqwest::Client,
-    ) -> std::result::Result<bool, AuthError> {
+    ) -> Result<bool> {
         let data = match &self.data {
             Some(d) => d,
             None => return Ok(false), // Not logged in
@@ -225,7 +235,7 @@ impl AuthStore {
             profile,
         });
 
-        self.save().map_err(|e| AuthError::Io(std::io::Error::other(e)))?;
+        self.save()?;
         Ok(true)
     }
 }
