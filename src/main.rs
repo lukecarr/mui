@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
             } else {
                 "/dev/null"
             };
-            std::fs::File::open(null_path).unwrap()
+            std::fs::File::open(null_path).expect("opening /dev/null or NUL should always succeed")
         });
 
     let env_filter =

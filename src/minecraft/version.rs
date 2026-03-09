@@ -13,29 +13,38 @@ use color_eyre::Result;
 use serde::Deserialize;
 use tracing::debug;
 
-/// Top-level version metadata.
+/// Top-level version metadata for a specific Minecraft version.
+///
+/// Parsed from the version metadata JSON linked in the version manifest.
 #[derive(Debug, Clone, Deserialize)]
 pub struct VersionMeta {
+    /// Version identifier (e.g., "1.21.4").
     pub id: String,
+    /// Version type string (e.g., "release", "snapshot").
     #[serde(rename = "type")]
     pub version_type: String,
+    /// Fully-qualified Java main class to launch.
     #[serde(rename = "mainClass")]
     pub main_class: String,
 
-    /// Modern argument format (1.13+)
+    /// Modern argument format (1.13+).
     pub arguments: Option<Arguments>,
-    /// Legacy argument format (pre-1.13)
+    /// Legacy argument format (pre-1.13).
     #[serde(rename = "minecraftArguments")]
     pub minecraft_arguments: Option<String>,
 
+    /// Required libraries with download info and platform rules.
     pub libraries: Vec<Library>,
 
+    /// Reference to the asset index for this version.
     #[serde(rename = "assetIndex")]
     pub asset_index: AssetIndexRef,
 
+    /// Client JAR and other download artifacts.
     pub downloads: Downloads,
 }
 
+/// JVM and game arguments for modern versions (1.13+).
 #[derive(Debug, Clone, Deserialize)]
 pub struct Arguments {
     #[serde(default)]
@@ -63,52 +72,80 @@ pub enum ArgumentValueInner {
     Multiple(Vec<String>),
 }
 
+/// A platform rule that determines whether a library or argument applies.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Rule {
-    pub action: String, // "allow" or "disallow"
+    /// `"allow"` or `"disallow"`.
+    pub action: String,
+    /// OS-specific conditions.
     pub os: Option<OsRule>,
+    /// Feature flag conditions (e.g., demo mode, quick play).
     pub features: Option<HashMap<String, bool>>,
 }
 
+/// OS-specific conditions within a [`Rule`].
 #[derive(Debug, Clone, Deserialize)]
 pub struct OsRule {
+    /// Target OS name (e.g., `"windows"`, `"osx"`, `"linux"`).
     pub name: Option<String>,
+    /// Target architecture (e.g., `"x86"`, `"x86_64"`).
     pub arch: Option<String>,
 }
 
+/// A library dependency required by the Minecraft version.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Library {
-    pub name: String, // Maven coordinates: group:artifact:version
+    /// Maven coordinates: `group:artifact:version[:classifier]`.
+    pub name: String,
+    /// Download information for the library artifact.
     pub downloads: Option<LibraryDownloads>,
+    /// Platform rules that determine if this library should be included.
     pub rules: Option<Vec<Rule>>,
+    /// Map of OS name to native classifier template (e.g., `"linux"` -> `"natives-linux"`).
     pub natives: Option<HashMap<String, String>>,
-    pub url: Option<String>, // Repository base URL (for libs without downloads.artifact)
+    /// Custom repository base URL (for libraries not hosted on libraries.minecraft.net).
+    pub url: Option<String>,
 }
 
+/// Download information for a library's artifacts and classifiers.
 #[derive(Debug, Clone, Deserialize)]
 pub struct LibraryDownloads {
+    /// The main library artifact.
     pub artifact: Option<DownloadInfo>,
+    /// Platform-specific native classifiers.
     pub classifiers: Option<HashMap<String, DownloadInfo>>,
 }
 
+/// Download metadata for a single file.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DownloadInfo {
+    /// Relative file path within the libraries directory.
     pub path: Option<String>,
+    /// Download URL.
     pub url: String,
+    /// Expected SHA-1 hash for verification.
     pub sha1: Option<String>,
+    /// File size in bytes.
     pub size: Option<u64>,
 }
 
+/// Reference to a version's asset index.
 #[derive(Debug, Clone, Deserialize)]
 pub struct AssetIndexRef {
+    /// Asset index identifier (e.g., "17").
     pub id: String,
+    /// SHA-1 hash of the asset index JSON.
     pub sha1: String,
+    /// Size of the asset index JSON in bytes.
     pub size: u64,
+    /// URL to download the asset index JSON.
     pub url: String,
 }
 
+/// Top-level download artifacts for the version.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Downloads {
+    /// The client JAR download information.
     pub client: DownloadInfo,
 }
 
@@ -118,9 +155,12 @@ pub struct AssetIndex {
     pub objects: HashMap<String, AssetObject>,
 }
 
+/// A single asset object in the asset index.
 #[derive(Debug, Clone, Deserialize)]
 pub struct AssetObject {
+    /// SHA-1 hash of the asset (also used as the filename).
     pub hash: String,
+    /// File size in bytes.
     pub size: u64,
 }
 
