@@ -3,7 +3,7 @@ name = "mui"
 version = "0.1.0"
 edition = "2024"
 description = "MUI - A TUI launcher for Minecraft Java Edition"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 # TUI

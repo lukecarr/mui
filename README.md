@@ -22,3 +22,8 @@
 ───────────────────────────────────────────────────────────────────────────────
  Enter Launch  n New  e Edit  d Delete  l Login  q Quit
 ```
+
+## License
+
+The MUI project is dual-licensed, under either the [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE) licenses.
+
