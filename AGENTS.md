@@ -3,7 +3,6 @@
 ## Project Overview
 
 MUI is a terminal user interface (TUI) launcher for Minecraft Java Edition, built in Rust.
-It is similar to MultiMC/Prism Launcher but runs entirely in the terminal using ratatui.
 
 ## Architecture
 
@@ -44,21 +43,20 @@ src/
         └── log_panel.rs # Shared LogBuffer, TuiLogLayer for tracing, log panel renderer
 ```
 
-**27 source files, ~3,950 lines of Rust.**
-
 ## Key Design Decisions
 
 - **Auth flow**: Authorization Code Flow with a temporary localhost HTTP server to catch
   the redirect. Browser opens for the user to log in. No device code flow.
-- **No offline mode** in MVP. Microsoft authentication is required.
+- **No offline mode**: Microsoft authentication is required.
 - **MSA Client ID**: Set at build time via the `MUI_MSA_CLIENT_ID` environment variable
-  (compiled in with `env!()`). Register your own at the Azure portal.
+  (compiled in with `env!()`; this variable must be set for the project to compile—see
+  `src/config.rs` for Azure app registration URLs and details on obtaining a client ID).
 - **From scratch**: All auth, download, and launch logic is implemented directly using
   the raw Microsoft/Mojang APIs, not via third-party Minecraft crates.
 - **Async**: tokio runtime with reqwest for HTTP. TUI event loop runs on the main thread
   with async operations spawned as tasks.
 - **Instance management**: Each instance has its own directory with config, game files,
-  and version info. Similar to Prism Launcher's instance model.
+  and version info.
 - **Channel-based async architecture**: Background tasks (auth, downloads, game process)
   communicate back to the main event loop via `mpsc::UnboundedSender<AppEvent>`. The main
   loop uses `tokio::select!` to handle both terminal input and background events without
@@ -118,7 +116,7 @@ The log panel appears on the home screen (below instance list) and the launch sc
 │   1.21.4  |  Last played: 2026-03-05                    │  <- instance list (Min)
 ├─────────────────────────────────────────────────────────┤
 │  INF MUI starting up                                    │
-│  INF Loaded auth for username                            │  <- log panel (12 rows)
+│  INF Loaded auth for username                           │  <- log panel (12 rows)
 ├─────────────────────────────────────────────────────────┤
 │ Enter Launch  n New  e Edit  d Delete  l Login  q Quit  │  <- footer (3 rows)
 └─────────────────────────────────────────────────────────┘
@@ -204,45 +202,6 @@ Shared files are stored globally to avoid duplication:
 - `~/.local/share/mui/libraries/` — Shared library JARs
 - `~/.local/share/mui/versions/` — Version metadata + client JARs
 
-## Dependencies
-
-```toml
-ratatui = "0.30"                          # TUI framework
-crossterm = "0.29"                        # Terminal backend
-tokio = { version = "1", features = ["full"] }  # Async runtime
-reqwest = { version = "0.13", features = ["json", "form"] }  # HTTP client
-serde = { version = "1", features = ["derive"] }  # Serialization
-serde_json = "1"                          # JSON
-sha1 = "0.10"                             # SHA-1 hash verification
-digest = "0.10"                           # Digest trait for sha1
-zip = "8"                                 # ZIP extraction for native libs
-directories = "6"                         # XDG/platform directories
-thiserror = "2"                           # Error derive macro
-color-eyre = "0.6"                        # Error reporting
-open = "5"                                # Open browser for OAuth
-uuid = { version = "1", features = ["v4"] }  # UUID generation
-chrono = { version = "0.4", features = ["serde"] }  # Date/time
-tracing = "0.1"                           # Structured logging
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }  # Log output
-serde_urlencoded = "0.7"                  # URL encoding for OAuth
-url = "2"                                 # URL parsing
-```
-
-## Development Notes
-
-- Reference implementation: Prism Launcher source is at `~/src/prism-launcher/`
-  - Auth flow: `launcher/minecraft/auth/steps/`
-  - Launch: `launcher/minecraft/launch/LauncherPartLaunch.cpp`
-  - Version parsing: `launcher/minecraft/MojangVersionFormat.cpp`
-- The TUI uses ratatui 0.30 with crossterm backend
-- All network operations are async (tokio + reqwest)
-- Errors use `thiserror` for library errors, `color-eyre` for application-level reporting
-- Token data is stored as JSON in the platform data directory
-- Edition 2024 is used — note that `ref` in pattern matching is handled differently
-  (implicit borrowing in match arms; explicit `ref`/`ref mut` is usually not needed)
-- The login flow runs in a background task and writes auth to disk; the main App reloads
-  from disk on `LoginSuccess` to pick up the new tokens
-
 ## Coding Conventions
 
 - Use `color_eyre::Result` as the default Result type in application code
@@ -257,6 +216,7 @@ url = "2"                                 # URL parsing
 ## Keyboard Shortcuts
 
 ### Home Screen
+
 | Key | Action |
 |-----|--------|
 | `j` / `Down` | Select next instance |
@@ -270,6 +230,7 @@ url = "2"                                 # URL parsing
 | `Ctrl+C` | Force quit (any screen) |
 
 ### Version Browser
+
 | Key | Action |
 |-----|--------|
 | `j` / `Down` | Select next version |
@@ -279,12 +240,14 @@ url = "2"                                 # URL parsing
 | `Esc` | Back to home |
 
 ### Login Screen
+
 | Key | Action |
 |-----|--------|
 | `Enter` | Start login / retry on error / go home on success |
 | `Esc` | Back to home |
 
 ### Launch Screen
+
 | Key | Action |
 |-----|--------|
 | `Esc` | Back to home (game continues running) |

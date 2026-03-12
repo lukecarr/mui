@@ -63,24 +63,50 @@ impl InstanceManager {
             return Ok(instances);
         }
 
+        // Canonicalize the base instances directory to prevent directory traversal and
+        // ensure that all discovered instance configs stay within this directory.
+        let base_dir = self.instances_dir.canonicalize()?;
+
         for entry in std::fs::read_dir(&self.instances_dir)? {
             let entry = entry?;
-            let path = entry.path();
-            if !path.is_dir() {
+            // Constrain entry paths to the canonical base directory and avoid using
+            // potentially untrusted paths returned by the filesystem directly.
+            let entry_name = entry.file_name();
+            let path = base_dir.join(&entry_name);
+            let canonical_dir = match path.canonicalize() {
+                Ok(p) => p,
+                Err(_) => {
+                    // If we can't canonicalize (e.g., directory was removed), skip this entry.
+                    continue;
+                }
+            };
+            if !canonical_dir.is_dir() {
                 continue;
             }
 
-            let config_path = path.join(INSTANCE_CONFIG_FILE);
-            if config_path.exists() {
-                match std::fs::read_to_string(&config_path) {
+            let config_path = canonical_dir.join(INSTANCE_CONFIG_FILE);
+            // Ensure the resolved config path stays within the canonical base directory.
+            let config_path_canonical = match config_path.canonicalize() {
+                Ok(p) => p,
+                Err(_) => {
+                    // If we can't canonicalize (e.g., file doesn't exist yet), skip this entry.
+                    continue;
+                }
+            };
+            if !config_path_canonical.starts_with(&base_dir) {
+                continue;
+            }
+
+            if config_path_canonical.exists() {
+                match std::fs::read_to_string(&config_path_canonical) {
                     Ok(contents) => match serde_json::from_str::<InstanceConfig>(&contents) {
                         Ok(config) => {
-                            instances.push(Instance { config, dir: path });
+                            instances.push(Instance { config, dir: canonical_dir });
                         }
                         Err(e) => {
                             tracing::warn!(
                                 "Failed to parse instance config at {:?}: {}",
-                                config_path,
+                                config_path_canonical,
                                 e
                             );
                         }
@@ -88,7 +114,7 @@ impl InstanceManager {
                     Err(e) => {
                         tracing::warn!(
                             "Failed to read instance config at {:?}: {}",
-                            config_path,
+                            config_path_canonical,
                             e
                         );
                     }
