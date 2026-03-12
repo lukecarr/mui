@@ -49,7 +49,8 @@ src/
   the redirect. Browser opens for the user to log in. No device code flow.
 - **No offline mode**: Microsoft authentication is required.
 - **MSA Client ID**: Set at build time via the `MUI_MSA_CLIENT_ID` environment variable
-  (compiled in with `env!()`).
+  (compiled in with `env!()`; this variable must be set for the project to compile—see
+  `src/config.rs` for Azure app registration URLs and details on obtaining a client ID).
 - **From scratch**: All auth, download, and launch logic is implemented directly using
   the raw Microsoft/Mojang APIs, not via third-party Minecraft crates.
 - **Async**: tokio runtime with reqwest for HTTP. TUI event loop runs on the main thread
