@@ -7,8 +7,7 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, Paragraph, Wrap},
 };
 
-use crate::minecraft::download::DownloadProgress;
-use crate::ui::theme;
+use crate::{minecraft::download::DownloadProgress, ui::theme};
 
 #[derive(Debug, Clone)]
 pub enum LaunchState {

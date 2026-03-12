@@ -146,15 +146,19 @@ async fn parse_xbox_response(resp: reqwest::Response, label: &str) -> Result<Xbo
     if !status.is_success() {
         if let Ok(err) = serde_json::from_str::<XstsError>(&body) {
             let msg = match err.xerr {
-                Some(XERR_NO_XBOX_PROFILE) => "This Microsoft account does not have an Xbox Live profile. \
+                Some(XERR_NO_XBOX_PROFILE) => {
+                    "This Microsoft account does not have an Xbox Live profile. \
                                      You may need to sign up at xbox.com."
-                    .to_string(),
+                        .to_string()
+                }
                 Some(XERR_REGION_BLOCKED) => {
                     "Xbox Live is not available in your country/region.".to_string()
                 }
-                Some(XERR_MINOR_FAMILY) => "This account belongs to a minor and must be added to a \
+                Some(XERR_MINOR_FAMILY) => {
+                    "This account belongs to a minor and must be added to a \
                      Microsoft Family to use Xbox Live."
-                    .to_string(),
+                        .to_string()
+                }
                 Some(code) => format!(
                     "Xbox error {code}: {}",
                     err.message.as_deref().unwrap_or("unknown")

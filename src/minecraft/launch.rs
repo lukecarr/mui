@@ -1,16 +1,15 @@
 //! Build JVM command line and spawn the Minecraft game process.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::{collections::HashMap, path::PathBuf, process::Stdio};
 
 use color_eyre::Result;
 use tokio::process::Command;
 use tracing::{debug, info};
 
-use super::download;
-use super::rules;
-use super::version::{ArgumentValue, ArgumentValueInner, VersionMeta};
+use super::{
+    download, rules,
+    version::{ArgumentValue, ArgumentValueInner, VersionMeta},
+};
 
 /// Configuration for launching Minecraft.
 #[derive(Debug, Clone)]
@@ -35,6 +34,8 @@ pub struct LaunchConfig {
     pub window_width: u32,
     /// Window height
     pub window_height: u32,
+    /// Custom JVM arguments from the instance config
+    pub jvm_args: Vec<String>,
     /// Player username
     pub username: String,
     /// Player UUID (from Minecraft profile)
@@ -77,6 +78,11 @@ pub async fn launch(meta: &VersionMeta, config: &LaunchConfig) -> Result<tokio::
     // Launcher branding
     args.push("-Dminecraft.launcher.brand=mui".to_string());
     args.push("-Dminecraft.launcher.version=0.1.0".to_string());
+
+    // Custom JVM args from instance config
+    for arg in &config.jvm_args {
+        args.push(arg.clone());
+    }
 
     // JVM args from version metadata (1.13+)
     if let Some(ref arguments) = meta.arguments {
@@ -142,7 +148,6 @@ pub async fn launch(meta: &VersionMeta, config: &LaunchConfig) -> Result<tokio::
 
     info!("Launching Minecraft {}...", meta.id);
     debug!("Java: {}", config.java_path);
-
 
     // Ensure game directory exists
     tokio::fs::create_dir_all(&config.game_dir).await?;
@@ -245,56 +250,4 @@ fn classpath_separator() -> &'static str {
     } else {
         ":"
     }
-}
-
-/// Detect the system Java installation.
-///
-/// Searches in order: `JAVA_HOME`, `PATH` (via `which`/`where`), and common
-/// Windows install locations. Returns `None` if Java cannot be found.
-pub fn detect_java() -> Option<String> {
-    let java_bin = if cfg!(target_os = "windows") {
-        "java.exe"
-    } else {
-        "java"
-    };
-
-    // Try JAVA_HOME first
-    if let Ok(java_home) = std::env::var("JAVA_HOME") {
-        let java_path = Path::new(&java_home).join("bin").join(java_bin);
-        if java_path.exists() {
-            return Some(java_path.to_string_lossy().to_string());
-        }
-    }
-
-    // Try PATH
-    let find_cmd = if cfg!(target_os = "windows") {
-        "where"
-    } else {
-        "which"
-    };
-    if let Ok(output) = std::process::Command::new(find_cmd).arg("java").output()
-        && output.status.success()
-    {
-        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !path.is_empty() {
-            return Some(path);
-        }
-    }
-
-    // Windows: try common locations
-    if cfg!(target_os = "windows") {
-        let candidates = [
-            "C:\\Program Files\\Java\\jdk-21\\bin\\java.exe",
-            "C:\\Program Files\\Java\\jdk-17\\bin\\java.exe",
-            "C:\\Program Files\\Eclipse Adoptium\\jdk-21\\bin\\java.exe",
-            "C:\\Program Files\\Eclipse Adoptium\\jdk-17\\bin\\java.exe",
-        ];
-        for path in &candidates {
-            if Path::new(path).exists() {
-                return Some(path.to_string());
-            }
-        }
-    }
-
-    None
 }

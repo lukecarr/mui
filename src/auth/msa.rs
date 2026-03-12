@@ -4,8 +4,10 @@
 //! HTTP server catches the redirect and extracts the authorization code, which
 //! is then exchanged for an access token.
 
-use std::io::{BufRead, BufReader, Write};
-use std::net::TcpListener;
+use std::{
+    io::{BufRead, BufReader, Write},
+    net::TcpListener,
+};
 
 use serde::Deserialize;
 use tracing::{debug, info};
@@ -69,8 +71,7 @@ pub async fn login(client_id: &str, http: &reqwest::Client) -> Result<MsaTokens>
     // Wait for the redirect (blocking, so we run on a blocking thread)
     let code = {
         let redirect_uri_clone = redirect_uri.clone();
-        tokio::task::spawn_blocking(move || wait_for_code(listener, &redirect_uri_clone))
-            .await??
+        tokio::task::spawn_blocking(move || wait_for_code(listener, &redirect_uri_clone)).await??
     };
 
     debug!("Received authorization code");

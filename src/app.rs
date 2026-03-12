@@ -8,22 +8,26 @@ use std::time::Duration;
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Frame;
-use tokio::io::AsyncBufReadExt;
-use tokio::sync::mpsc;
+use tokio::{io::AsyncBufReadExt, sync::mpsc};
 use tracing::info;
 
-use crate::auth::AuthStore;
-use crate::config::Config;
-use crate::instance::manager::{Instance, InstanceManager};
-use crate::minecraft::{download, launch, manifest, version};
-use crate::ui::screens::{
-    home::HomeScreen,
-    instance::InstanceScreen,
-    launch::{LaunchScreen, LaunchState},
-    login::{LoginScreen, LoginState},
-    versions::VersionsScreen,
+use crate::{
+    auth::AuthStore,
+    config::Config,
+    instance::manager::{Instance, InstanceManager},
+    java::{detect, runtime},
+    minecraft::{download, launch, manifest, version},
+    ui::{
+        screens::{
+            home::HomeScreen,
+            instance::InstanceScreen,
+            launch::{LaunchScreen, LaunchState},
+            login::{LoginScreen, LoginState},
+            versions::VersionsScreen,
+        },
+        widgets::log_panel::{self, LogBuffer},
+    },
 };
-use crate::ui::widgets::log_panel::{self, LogBuffer};
 
 /// Events sent from background tasks back to the main event loop.
 enum AppEvent {
@@ -98,6 +102,8 @@ impl App {
 
         let (event_tx, event_rx) = mpsc::unbounded_channel();
 
+        let java_dir = config.java_dir.clone();
+
         Self {
             http: reqwest::Client::new(),
             auth_store,
@@ -108,7 +114,7 @@ impl App {
             home,
             login: LoginScreen::new(),
             versions: VersionsScreen::new(),
-            instance_screen: InstanceScreen::new(),
+            instance_screen: InstanceScreen::new(java_dir),
             launch_screen: None,
             event_tx,
             event_rx,
@@ -353,7 +359,7 @@ impl App {
             }
             KeyCode::Char('e') => {
                 if let Some(inst) = self.home.selected_instance() {
-                    self.instance_screen.instance = Some(inst.clone());
+                    self.instance_screen.set_instance(Some(inst.clone()));
                     self.screen = Screen::Instance;
                 }
             }
@@ -557,8 +563,7 @@ impl App {
         let config = self.config.clone();
 
         tokio::spawn(async move {
-            if let Err(e) =
-                run_launch_pipeline(tx.clone(), http, config, auth_data, instance).await
+            if let Err(e) = run_launch_pipeline(tx.clone(), http, config, auth_data, instance).await
             {
                 let _ = tx.send(AppEvent::LaunchError(format!("{e}")));
             }
@@ -648,21 +653,111 @@ async fn run_launch_pipeline(
     }
     let _ = tx.send(AppEvent::DownloadComplete);
 
-    // 5. Detect Java
-    let java_path = instance
-        .config
-        .java_path
-        .clone()
-        .or_else(launch::detect_java)
-        .ok_or_else(|| {
-            color_eyre::eyre::eyre!(
-                "Java not found. Install Java or set java_path in instance config."
+    // 5. Resolve Java (managed runtime → system detection → auto-install)
+    //
+    // Versions without a `javaVersion` field in the metadata (pre-1.7ish)
+    // require Java 8. We default to jre-legacy / major 8 so that the
+    // resolution chain doesn't accidentally pick up an incompatible newer Java.
+    let required_component: &str = meta
+        .java_version
+        .as_ref()
+        .map(|jv| jv.component.as_str())
+        .unwrap_or("jre-legacy");
+    let required_major: u32 = meta
+        .java_version
+        .as_ref()
+        .map(|jv| jv.major_version)
+        .unwrap_or(8);
+
+    let _ = tx.send(AppEvent::LaunchStatus(format!(
+        "Resolving Java {required_major} (component: {required_component})..."
+    )));
+
+    // Try to find a suitable Java installation
+    let mut resolved = detect::resolve_java(
+        &config.java_dir,
+        Some(required_component),
+        Some(required_major),
+        instance.config.java_path.as_deref(),
+    );
+
+    // If no suitable Java found, auto-download the correct managed runtime
+    if resolved.is_none() {
+        let _ = tx.send(AppEvent::LaunchStatus(format!(
+            "No suitable Java {required_major} found. Downloading managed runtime '{required_component}'..."
+        )));
+
+        // Fetch the runtime index to find the manifest URL
+        let runtime_index = runtime::fetch_runtime_index(&http).await?;
+        let entry =
+            runtime::find_component(&runtime_index, required_component).ok_or_else(|| {
+                color_eyre::eyre::eyre!(
+                    "Java runtime '{required_component}' is not available for platform '{}'",
+                    runtime::current_platform()
+                )
+            })?;
+
+        let _ = tx.send(AppEvent::LaunchStatus(format!(
+            "Installing Java runtime '{required_component}' (version {})...",
+            entry.version.name
+        )));
+
+        // Download with progress reporting
+        let (java_progress_tx, mut java_progress_rx) = mpsc::channel(64);
+        let dl_http = http.clone();
+        let manifest_url = entry.manifest.url.clone();
+        let java_dir = config.java_dir.clone();
+        let component_owned = required_component.to_string();
+
+        let download_handle = tokio::spawn(async move {
+            runtime::download_runtime(
+                &component_owned,
+                &manifest_url,
+                &java_dir,
+                &dl_http,
+                Some(java_progress_tx),
             )
-        })?;
+            .await
+        });
+
+        // Forward Java download progress
+        let java_progress_fwd_tx = tx.clone();
+        let progress_forwarder = tokio::spawn(async move {
+            while let Some(progress) = java_progress_rx.recv().await {
+                let _ = java_progress_fwd_tx.send(AppEvent::LaunchStatus(format!(
+                    "Installing Java: {}/{} files ({})",
+                    progress.completed_files, progress.total_files, progress.current_file
+                )));
+            }
+        });
+
+        let java_path = download_handle.await??;
+        progress_forwarder.abort();
+
+        let _ = tx.send(AppEvent::LaunchStatus(format!(
+            "Java runtime '{required_component}' installed successfully"
+        )));
+
+        resolved = Some(detect::ResolvedJava {
+            path: java_path.to_string_lossy().to_string(),
+            source: detect::JavaSource::Managed {
+                component: required_component.to_string(),
+            },
+            major_version: Some(required_major),
+        });
+    }
+
+    let java = resolved.ok_or_else(|| {
+        color_eyre::eyre::eyre!(
+            "Java not found. Install Java {required_major} or set java_path in instance config."
+        )
+    })?;
+
+    info!("Using Java: {} (source: {:?})", java.path, java.source);
 
     // 6. Build launch config & launch
     let launch_config = launch::LaunchConfig {
-        java_path,
+        java_path: java.path,
         game_dir: instance.game_dir(),
         assets_dir: config.assets_dir,
         libraries_dir: config.libraries_dir,
@@ -672,6 +767,7 @@ async fn run_launch_pipeline(
         max_memory: instance.config.max_memory_mb,
         window_width: instance.config.window_width,
         window_height: instance.config.window_height,
+        jvm_args: instance.config.jvm_args.clone(),
         username: auth_data.profile.username,
         uuid: auth_data.profile.uuid,
         access_token: mc_token,

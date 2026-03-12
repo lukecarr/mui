@@ -8,8 +8,10 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
-use crate::minecraft::manifest::{VersionEntry, VersionType};
-use crate::ui::theme;
+use crate::{
+    minecraft::manifest::{VersionEntry, VersionType},
+    ui::theme,
+};
 
 pub struct VersionsScreen {
     pub list_state: ListState,

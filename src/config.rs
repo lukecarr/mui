@@ -25,6 +25,8 @@ pub struct Config {
     pub libraries_dir: PathBuf,
     /// Directory for version metadata JSONs
     pub versions_dir: PathBuf,
+    /// Directory for MUI-managed Java runtime installations
+    pub java_dir: PathBuf,
     /// Path to the auth token store file
     pub auth_store_path: PathBuf,
 }
@@ -49,6 +51,7 @@ impl Config {
         let assets_dir = data_dir.join("assets");
         let libraries_dir = data_dir.join("libraries");
         let versions_dir = data_dir.join("versions");
+        let java_dir = data_dir.join("java");
         let auth_store_path = data_dir.join("auth.json");
 
         // Ensure directories exist
@@ -56,6 +59,7 @@ impl Config {
         std::fs::create_dir_all(&assets_dir)?;
         std::fs::create_dir_all(&libraries_dir)?;
         std::fs::create_dir_all(&versions_dir)?;
+        std::fs::create_dir_all(&java_dir)?;
 
         Ok(Config {
             msa_client_id: DEFAULT_MSA_CLIENT_ID.to_string(),
@@ -64,6 +68,7 @@ impl Config {
             assets_dir,
             libraries_dir,
             versions_dir,
+            java_dir,
             auth_store_path,
         })
     }

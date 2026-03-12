@@ -9,9 +9,11 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use super::AuthError;
-use super::msa::{self, MsaTokens};
-use super::xbox;
+use super::{
+    AuthError,
+    msa::{self, MsaTokens},
+    xbox,
+};
 
 type Result<T> = std::result::Result<T, AuthError>;
 
@@ -107,10 +109,7 @@ impl AuthStore {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(
-                    &self.path,
-                    std::fs::Permissions::from_mode(0o600),
-                )?;
+                std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600))?;
             }
             debug!("Saved auth data to {:?}", self.path);
         }
@@ -125,11 +124,7 @@ impl AuthStore {
     /// # Errors
     ///
     /// Returns [`AuthError`] if any step of the auth chain fails.
-    pub async fn login(
-        &mut self,
-        client_id: &str,
-        http: &reqwest::Client,
-    ) -> Result<()> {
+    pub async fn login(&mut self, client_id: &str, http: &reqwest::Client) -> Result<()> {
         // Step 1: Microsoft OAuth2
         let msa = msa::login(client_id, http).await?;
         let msa_expires_at = Utc::now() + Duration::seconds(msa.expires_in as i64);
@@ -173,11 +168,7 @@ impl AuthStore {
     /// # Errors
     ///
     /// Returns [`AuthError`] if the refresh flow fails.
-    pub async fn ensure_valid(
-        &mut self,
-        client_id: &str,
-        http: &reqwest::Client,
-    ) -> Result<bool> {
+    pub async fn ensure_valid(&mut self, client_id: &str, http: &reqwest::Client) -> Result<bool> {
         let data = match &self.data {
             Some(d) => d,
             None => return Ok(false), // Not logged in

@@ -100,7 +100,9 @@ pub enum AuthError {
     NotOwned,
 
     /// Account has no Minecraft profile (game may not be purchased).
-    #[error("This Microsoft account does not have a Minecraft profile. You may need to purchase the game.")]
+    #[error(
+        "This Microsoft account does not have a Minecraft profile. You may need to purchase the game."
+    )]
     NoProfile,
 
     /// Minecraft profile endpoint returned a non-success status.
